@@ -12,6 +12,16 @@ from shared.db import get_money, add_money, get_setting, set_setting
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
 
+#-----------------
+from flask import Flask
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "alive"
+
+app.run(host="0.0.0.0", port=10000)
+#-----------------
 
 # -----------------
 # スロット本体（ジャグラー風）
