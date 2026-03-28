@@ -1,12 +1,28 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from flask import Flask
+from threading import Thread
 
 from config import TOKEN, ADMINS
 from db import init_db, get_money, add_money, get_ranking
 
 # -----------------
-# intents
+# Flask（Render対策）
+# -----------------
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is alive"
+
+def run_web():
+    app.run(host="0.0.0.0", port=10000)
+
+Thread(target=run_web).start()
+
+# -----------------
+# Discord Bot
 # -----------------
 intents = discord.Intents.default()
 intents.members = True
@@ -25,9 +41,8 @@ async def on_ready():
 # -----------------
 # /残高確認
 # -----------------
-@bot.tree.command(name="残高確認", description="自分の所持金を確認")
+@bot.tree.command(name="残高確認")
 async def balance(interaction: discord.Interaction):
-
     money = get_money(str(interaction.user.id))
 
     await interaction.response.send_message(
@@ -38,7 +53,7 @@ async def balance(interaction: discord.Interaction):
 # -----------------
 # /送金
 # -----------------
-@bot.tree.command(name="送金", description="他の人に送金")
+@bot.tree.command(name="送金")
 @app_commands.describe(member="相手", amount="金額")
 async def pay(interaction: discord.Interaction, member: discord.Member, amount: int):
 
@@ -61,35 +76,14 @@ async def pay(interaction: discord.Interaction, member: discord.Member, amount: 
     )
 
 # -----------------
-# /増減（管理者）
-# -----------------
-@bot.tree.command(name="増減", description="管理者用")
-@app_commands.describe(member="対象", amount="増減")
-async def adjust(interaction: discord.Interaction, member: discord.Member, amount: int):
-
-    if interaction.user.id not in ADMINS:
-        await interaction.response.send_message("権限なし", ephemeral=True)
-        return
-
-    add_money(str(member.id), amount)
-
-    await interaction.response.send_message(
-        f"{member.mention} に {amount}ペリカ変更"
-    )
-
-# -----------------
 # /ランキング
 # -----------------
-@bot.tree.command(name="ランキング", description="ランキング表示")
+@bot.tree.command(name="ランキング")
 async def ranking(interaction: discord.Interaction):
 
     data = get_ranking()
 
-    if not data:
-        await interaction.response.send_message("データなし")
-        return
-
-    msg = "💰 所持金ランキング 💰\n"
+    msg = "💰ランキング💰\n"
 
     for i, (user_id, money) in enumerate(data, start=1):
         try:
