@@ -1,67 +1,73 @@
 from supabase import create_client
 import os
 
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_KEY")
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(url, key)
 
-# -------------------------
-# 通貨系
-# -------------------------
 
+# -----------------
+# 所持金取得
+# -----------------
 def get_money(user_id: str):
-    res = supabase.table("users").select("money").eq("user_id", user_id).execute()
+    res = supabase.table("users").select("*").eq("user_id", user_id).execute()
 
-    if not res.data:
-        supabase.table("users").insert({
-            "user_id": user_id,
-            "money": 30000
-        }).execute()
-        return 30000
+    if res.data:
+        return res.data[0]["money"]
 
-    return int(res.data[0]["money"])
-
-
-def add_money(user_id: str, amount: int):
-    current = get_money(user_id)
-
-    supabase.table("users").upsert({
+    supabase.table("users").insert({
         "user_id": user_id,
-        "money": current + amount
+        "money": 30000
     }).execute()
 
+    return 30000
 
-def get_ranking(limit: int = 10):
-    res = (
-        supabase.table("users")
-        .select("user_id, money")
-        .order("money", desc=True)
-        .limit(limit)
+
+# -----------------
+# 所持金変更
+# -----------------
+def add_money(user_id: str, amount: int):
+    current = get_money(user_id)
+    new_money = current + amount
+
+    supabase.table("users").update({
+        "money": new_money
+    }).eq("user_id", user_id).execute()
+
+
+# -----------------
+# ランキング
+# -----------------
+def get_ranking(limit=10):
+    res = supabase.table("users") \
+        .select("*") \
+        .order("money", desc=True) \
+        .limit(limit) \
         .execute()
-    )
+
     return res.data
 
 
-# -------------------------
-# スロット設定
-# -------------------------
-
+# -----------------
+# 設定（スロット倍率）
+# -----------------
 def get_setting():
-    res = supabase.table("settings").select("value").eq("key", "slot_setting").execute()
+    res = supabase.table("settings").select("*").eq("key", "slot").execute()
 
-    if not res.data:
-        supabase.table("settings").insert({
-            "key": "slot_setting",
-            "value": 3
-        }).execute()
-        return 3
+    if res.data:
+        return res.data[0]["value"]
 
-    return int(res.data[0]["value"])
+    supabase.table("settings").insert({
+        "key": "slot",
+        "value": 1
+    }).execute()
+
+    return 1
 
 
 def set_setting(value: int):
     supabase.table("settings").upsert({
-        "key": "slot_setting",
+        "key": "slot",
         "value": value
     }).execute()
