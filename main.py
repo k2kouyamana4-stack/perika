@@ -4,6 +4,10 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
+import asyncio
+import shutil
+from datetime import datetime
+
 from config import TOKEN, ADMINS
 from db import init_db, get_money, add_money, get_ranking
 
@@ -30,12 +34,31 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -----------------
+# DBバックアップ
+# -----------------
+def backup_db():
+    now = datetime.now().strftime("%Y%m%d_%H%M%S")
+    shutil.copy("money.db", f"backup_money_{now}.db")
+    print("DBバックアップ完了")
+
+async def backup_loop():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        backup_db()
+        await asyncio.sleep(60 * 10)  # 10分ごと
+
+# -----------------
 # 起動時
 # -----------------
 @bot.event
 async def on_ready():
     init_db()
     await bot.tree.sync()
+
+    # バックアップループ開始
+    bot.loop.create_task(backup_loop())
+
     print(f"ログイン: {bot.user}")
 
 # -----------------
