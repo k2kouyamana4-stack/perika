@@ -111,13 +111,10 @@ async def ranking(interaction: discord.Interaction):
     data = get_ranking()
 
     msg = "💰ランキング💰\n"
-<<<<<<< HEAD:economy_bot/main.py
 
     for i, row in enumerate(data, start=1):
         user_id = row["user_id"]
         money = row["money"]
-=======
->>>>>>> 18f545afaeee92858beaec9de92b8b3b814b822b:main.py
 
         try:
             user = await bot.fetch_user(int(user_id))
