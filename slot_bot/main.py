@@ -143,9 +143,9 @@ class SlotView(discord.ui.View):
         self.stop()
 
 # -----------------
-# /slot
+# /スロット
 # -----------------
-@bot.tree.command(name="slot", description="スロット")
+@bot.tree.command(name="スロット", description="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
@@ -164,9 +164,9 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
     )
 
 # -----------------
-# /auto_slot
+# /連続スロット
 # -----------------
-@bot.tree.command(name="auto_slot", description="連続スロット")
+@bot.tree.command(name="連続スロット", description="連続スロット")
 async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
 
     user_id = str(interaction.user.id)
@@ -187,7 +187,7 @@ async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
 # -----------------
 # 設定変更
 # -----------------
-@bot.tree.command(name="slot_setting", description="設定変更")
+@bot.tree.command(name="設定変更", description="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
     if value not in [1,2,3,4,5,6]:
@@ -199,7 +199,7 @@ async def set_slot(interaction: discord.Interaction, value: int):
 # -----------------
 # 設定確認
 # -----------------
-@bot.tree.command(name="slot_setting_view")
+@bot.tree.command(name="設定確認w")
 async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"{get_setting()}")
