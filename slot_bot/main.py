@@ -1,14 +1,15 @@
 import sys
 import os
+import asyncio
+import random
+from threading import Thread
+from flask import Flask
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-import random
-from flask import Flask
-from threading import Thread
 
 from shared.db import get_money, add_money, get_setting, set_setting
 
@@ -36,8 +37,22 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+ADMIN_IDS = {947136029285048340, 1423839192391356496}
+
 # -----------------
-# スロット
+# 絵柄
+# -----------------
+SYMBOLS = {
+    1: "🍒",
+    2: "🍋",
+    3: "🍉",
+    4: "⭐",
+    5: "💎",
+    6: "7️⃣"
+}
+
+# -----------------
+# スロット本体
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -48,28 +63,31 @@ def slot(user_id: str, bet: int):
 
     roll = random.randint(1, 100)
 
+    symbol = SYMBOLS.get(setting, "❓")
+
     if roll <= jackpot_rates[setting]:
         add_money(user_id, bet * 10)
-        return f"🎰✨JACKPOT +{bet*10}"
+        return f"{symbol}{symbol}{symbol} 🎰 JACKPOT +{bet*10}"
 
     elif roll <= base_rates[setting]:
         add_money(user_id, bet)
-        return f"✨WIN +{bet}"
+        return f"{symbol}{symbol}{symbol} ✨ WIN +{bet}"
 
     else:
         add_money(user_id, -bet)
-        return f"LOSE -{bet}"
+        return f"{symbol}{symbol}{symbol} 💥 LOSE -{bet}"
 
 # -----------------
 # /スロット
 # -----------------
-@bot.tree.command(name="スロット")
+@bot.tree.command(name="スロット", description="スロットを回す")
+@app_commands.describe(bet="賭け金（1以上）")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
 
     if bet <= 0:
-        await interaction.response.send_message("1以上", ephemeral=True)
+        await interaction.response.send_message("1以上にして", ephemeral=True)
         return
 
     if get_money(user_id) < bet:
@@ -77,23 +95,59 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
         return
 
     result = slot(user_id, bet)
-    await interaction.response.send_message(result)
+    balance = get_money(user_id)
+
+    await interaction.response.send_message(f"{result}\n💰残高: {balance}")
 
 # -----------------
-# 設定
+# /スロット連続（連続回転）
 # -----------------
-@bot.tree.command(name="設定変更")
+@bot.tree.command(name="スロット連続", description="連続スロット（最大10回）")
+@app_commands.describe(bet="1回の賭け金", times="回数（1〜10）")
+async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
+
+    user_id = str(interaction.user.id)
+
+    if bet <= 0:
+        await interaction.response.send_message("1以上にして", ephemeral=True)
+        return
+
+    if times < 1 or times > 10:
+        await interaction.response.send_message("回数は1〜10", ephemeral=True)
+        return
+
+    if get_money(user_id) < bet * times:
+        await interaction.response.send_message("残高不足", ephemeral=True)
+        return
+
+    await interaction.response.send_message("🎰 回転開始...")
+
+    logs = []
+
+    for i in range(times):
+        result = slot(user_id, bet)
+        logs.append(f"{i+1}: {result}")
+        await asyncio.sleep(1)
+
+    await interaction.followup.send("\n".join(logs))
+
+# -----------------
+# 設定変更（管理者）
+# -----------------
+@bot.tree.command(name="slot_setting", description="スロット倍率設定変更（管理者用）")
 async def set_slot(interaction: discord.Interaction, value: int):
 
-    if interaction.user.id not in [947136029285048340, 1423839192391356496]:
+    if interaction.user.id not in ADMIN_IDS:
         await interaction.response.send_message("権限なし", ephemeral=True)
         return
 
     set_setting(value)
     await interaction.response.send_message(f"設定: {value}")
 
-
-@bot.tree.command(name="設定確認")
+# -----------------
+# 設定確認
+# -----------------
+@bot.tree.command(name="slot_setting_view", description="スロット設定確認")
 async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"現在: {get_setting()}")
