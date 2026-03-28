@@ -1,23 +1,16 @@
-import sys
-import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import discord
 from discord import app_commands
 from discord.ext import commands
+
 from flask import Flask
 from threading import Thread
 
-
 import asyncio
-import shutil
 from datetime import datetime
-
-
-import asyncio
 
 from config import TOKEN
 from shared.db import get_money, add_money, get_ranking
+
 
 # -----------------
 # Flask（Render対策）
@@ -33,6 +26,7 @@ def run_web():
 
 Thread(target=run_web).start()
 
+
 # -----------------
 # Discord Bot
 # -----------------
@@ -41,20 +35,6 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# -----------------
-# DBバックアップ
-# -----------------
-def backup_db():
-    now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    shutil.copy("money.db", f"backup_money_{now}.db")
-    print("DBバックアップ完了")
-
-async def backup_loop():
-    await bot.wait_until_ready()
-
-    while not bot.is_closed():
-        backup_db()
-        await asyncio.sleep(60 * 10)  # 10分ごと
 
 # -----------------
 # 起動時
@@ -62,11 +42,8 @@ async def backup_loop():
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-
-    # バックアップループ開始
-    bot.loop.create_task(backup_loop())
-
     print(f"ログイン: {bot.user}")
+
 
 # -----------------
 # /残高確認
@@ -79,6 +56,7 @@ async def balance(interaction: discord.Interaction):
         f"所持金: {money}ペリカ",
         ephemeral=True
     )
+
 
 # -----------------
 # /送金
@@ -105,6 +83,7 @@ async def pay(interaction: discord.Interaction, member: discord.Member, amount: 
         f"{member.mention} に {amount}ペリカ送金した"
     )
 
+
 # -----------------
 # /ランキング
 # -----------------
@@ -115,10 +94,7 @@ async def ranking(interaction: discord.Interaction):
 
     msg = "💰ランキング💰\n"
 
-    for i, row in enumerate(data, start=1):
-        user_id = row["user_id"]
-        money = row["money"]
-
+    for i, (user_id, money) in enumerate(data, start=1):
         try:
             user = await bot.fetch_user(int(user_id))
             name = user.name
@@ -128,6 +104,7 @@ async def ranking(interaction: discord.Interaction):
         msg += f"{i}位: {name} - {money}ペリカ\n"
 
     await interaction.response.send_message(msg)
+
 
 # -----------------
 # 起動
