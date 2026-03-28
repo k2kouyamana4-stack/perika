@@ -2,7 +2,7 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import os
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -11,7 +11,6 @@ from flask import Flask
 from threading import Thread
 
 from shared.db import get_money, add_money, get_setting, set_setting
-
 
 # -----------------
 # Flask（Web対応）
@@ -29,7 +28,6 @@ def run_web():
 
 Thread(target=run_web).start()
 
-
 # -----------------
 # Bot
 # -----------------
@@ -37,7 +35,6 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
-
 
 # -----------------
 # スロット
@@ -63,7 +60,6 @@ def slot(user_id: str, bet: int):
         add_money(user_id, -bet)
         return f"LOSE -{bet}"
 
-
 # -----------------
 # /スロット
 # -----------------
@@ -82,7 +78,6 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     result = slot(user_id, bet)
     await interaction.response.send_message(result)
-
 
 # -----------------
 # 設定
@@ -103,7 +98,6 @@ async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"現在: {get_setting()}")
 
-
 # -----------------
 # 起動
 # -----------------
@@ -111,6 +105,5 @@ async def show_setting(interaction: discord.Interaction):
 async def on_ready():
     await bot.tree.sync()
     print("slot bot ready")
-
 
 bot.run(TOKEN)
