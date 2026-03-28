@@ -26,8 +26,6 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-Thread(target=run_web).start()
-
 # -----------------
 # Bot
 # -----------------
@@ -199,17 +197,25 @@ async def set_slot(interaction: discord.Interaction, value: int):
 # -----------------
 # 設定確認
 # -----------------
-@bot.tree.command(name="設定確認w")
+@bot.tree.command(name="設定確認", description="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"{get_setting()}")
 
 # -----------------
-# 起動
+# 起動イベント
 # -----------------
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print("slot bot ready")
 
-bot.run(TOKEN)
+# -----------------
+# 起動
+# -----------------
+def run_bot():
+    bot.run(TOKEN)
+
+if __name__ == "__main__":
+    Thread(target=run_web).start()
+    run_bot()
