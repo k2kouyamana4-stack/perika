@@ -1,35 +1,22 @@
-import json
 import sqlite3
+from supabase import create_client
 
-DB_NAME = "money.db"
+# Supabase設定
+SUPABASE_URL = "https://qvqsuayqinimwwuqfipe.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2cXN1YXlxaW5pbXd3dXFmaXBlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDcwMjA2NCwiZXhwIjoyMDkwMjc4MDY0fQ.oh2AOx_bi1y04G-I98-SbK7OtvBP33aoV7afxmX0x4g"
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# DB初期化
-conn = sqlite3.connect(DB_NAME)
+# ローカルDB
+conn = sqlite3.connect("money.db")
 c = conn.cursor()
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    user_id TEXT PRIMARY KEY,
-    money INTEGER DEFAULT 0
-)
-""")
+c.execute("SELECT user_id, money FROM users")
+rows = c.fetchall()
 
-conn.commit()
-
-# JSON読み込み
-with open("money.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-# 移行
-for user_id, money in data.items():
-    c.execute("""
-    INSERT INTO users (user_id, money)
-    VALUES (?, ?)
-    ON CONFLICT(user_id)
-    DO UPDATE SET money = ?
-    """, (user_id, money, money))
-
-conn.commit()
-conn.close()
+for user_id, money in rows:
+    supabase.table("users").upsert({
+        "user_id": user_id,
+        "money": money
+    }).execute()
 
 print("移行完了")
