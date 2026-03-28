@@ -1,60 +1,47 @@
-import sqlite3
+from supabase import create_client
 
-DB_NAME = "money.db"
+SUPABASE_URL = "あなたのURL"
+SUPABASE_KEY = "あなたのKEY"
 
-def init_db():
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        user_id TEXT PRIMARY KEY,
-        money INTEGER DEFAULT 0
-    )
-    """)
 
-    conn.commit()
-    conn.close()
+def ensure_user(user_id: str):
+    res = supabase.table("users").select("user_id").eq("user_id", user_id).execute()
+
+    if not res.data:
+        supabase.table("users").insert({
+            "user_id": user_id,
+            "money": 1000
+        }).execute()
 
 
 def get_money(user_id: str):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+    ensure_user(user_id)
 
-    c.execute("SELECT money FROM users WHERE user_id = ?", (user_id,))
-    result = c.fetchone()
-
-    conn.close()
-    return result[0] if result else 0
+    res = supabase.table("users").select("money").eq("user_id", user_id).execute()
+    return res.data[0]["money"]
 
 
 def add_money(user_id: str, amount: int):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+    ensure_user(user_id)
 
-    c.execute("""
-    INSERT INTO users (user_id, money)
-    VALUES (?, ?)
-    ON CONFLICT(user_id)
-    DO UPDATE SET money = money + ?
-    """, (user_id, amount, amount))
+    current = get_money(user_id)
+    new_balance = current + amount
 
-    conn.commit()
-    conn.close()
+    supabase.table("users") \
+        .update({"money": new_balance}) \
+        .eq("user_id", user_id) \
+        .execute()
+
+    return new_balance
 
 
 def get_ranking(limit=10):
-    conn = sqlite3.connect(DB_NAME)
-    c = conn.cursor()
+    res = supabase.table("users") \
+        .select("user_id, money") \
+        .order("money", desc=True) \
+        .limit(limit) \
+        .execute()
 
-    c.execute("""
-    SELECT user_id, money
-    FROM users
-    ORDER BY money DESC
-    LIMIT ?
-    """, (limit,))
-
-    data = c.fetchall()
-    conn.close()
-
-    return data
+    return res.data
