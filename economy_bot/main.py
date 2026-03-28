@@ -3,6 +3,13 @@ from discord import app_commands
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
+<<<<<<< HEAD:economy_bot/main.py
+=======
+
+import asyncio
+import shutil
+from datetime import datetime
+>>>>>>> 18f545afaeee92858beaec9de92b8b3b814b822b:main.py
 
 import asyncio
 
@@ -32,11 +39,30 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # -----------------
+# DBバックアップ
+# -----------------
+def backup_db():
+    now = datetime.now().strftime("%Y%m%d_%H%M%S")
+    shutil.copy("money.db", f"backup_money_{now}.db")
+    print("DBバックアップ完了")
+
+async def backup_loop():
+    await bot.wait_until_ready()
+
+    while not bot.is_closed():
+        backup_db()
+        await asyncio.sleep(60 * 10)  # 10分ごと
+
+# -----------------
 # 起動時
 # -----------------
 @bot.event
 async def on_ready():
     await bot.tree.sync()
+
+    # バックアップループ開始
+    bot.loop.create_task(backup_loop())
+
     print(f"ログイン: {bot.user}")
 
 # -----------------
@@ -85,10 +111,13 @@ async def ranking(interaction: discord.Interaction):
     data = get_ranking()
 
     msg = "💰ランキング💰\n"
+<<<<<<< HEAD:economy_bot/main.py
 
     for i, row in enumerate(data, start=1):
         user_id = row["user_id"]
         money = row["money"]
+=======
+>>>>>>> 18f545afaeee92858beaec9de92b8b3b814b822b:main.py
 
         try:
             user = await bot.fetch_user(int(user_id))
