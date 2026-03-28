@@ -3,13 +3,12 @@ from discord import app_commands
 from discord.ext import commands
 from flask import Flask
 from threading import Thread
-<<<<<<< HEAD:economy_bot/main.py
-=======
+
 
 import asyncio
 import shutil
 from datetime import datetime
->>>>>>> 18f545afaeee92858beaec9de92b8b3b814b822b:main.py
+
 
 import asyncio
 
