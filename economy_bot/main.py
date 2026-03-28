@@ -11,6 +11,11 @@ from datetime import datetime
 from config import TOKEN
 from shared.db import get_money, add_money, get_ranking
 
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 # -----------------
 # Flask（Render対策）
