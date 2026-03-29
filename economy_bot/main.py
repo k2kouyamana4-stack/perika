@@ -49,7 +49,7 @@ async def on_ready():
 
 
 # -----------------
-# ページUI（追加）
+# ページUI（メンション版）
 # -----------------
 class BalanceView(discord.ui.View):
     def __init__(self, data, author_id):
@@ -72,7 +72,8 @@ class BalanceView(discord.ui.View):
             user_id = row.get("user_id")
             money = row.get("money", 0)
 
-            msg += f"{i}. ID:{user_id} - {money}ペリカ\n"
+            # 🔥 メンション表示
+            msg += f"{i}. <@{user_id}> - {money}ペリカ\n"
 
         return msg
 
@@ -206,7 +207,7 @@ async def admin_adjust(interaction: discord.Interaction, member: discord.Member,
 
 
 # -----------------
-# /全残高一覧（UI版）
+# /全残高一覧（メンションUI版）
 # -----------------
 @bot.tree.command(name="全残高一覧")
 async def all_balance(interaction: discord.Interaction):
