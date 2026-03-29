@@ -169,9 +169,9 @@ async def ranking(interaction: discord.Interaction):
 
 
 # -----------------
-# /管理残高
+# /残高管理
 # -----------------
-@bot.tree.command(name="管理残高")
+@bot.tree.command(name="残高管理")
 async def admin_balance(interaction: discord.Interaction, member: discord.Member):
 
     if interaction.user.id not in ADMINS:
@@ -186,9 +186,9 @@ async def admin_balance(interaction: discord.Interaction, member: discord.Member
 
 
 # -----------------
-# /管理調整
+# /増減
 # -----------------
-@bot.tree.command(name="管理調整")
+@bot.tree.command(name="増減")
 async def admin_adjust(interaction: discord.Interaction, member: discord.Member, amount: int):
 
     if interaction.user.id not in ADMINS:
@@ -205,7 +205,7 @@ async def admin_adjust(interaction: discord.Interaction, member: discord.Member,
 
 
 # -----------------
-# /全残高一覧（完全全員版）
+# /残高一覧（完全全員版）
 # -----------------
 @bot.tree.command(name="全残高一覧")
 async def all_balance(interaction: discord.Interaction):
@@ -213,15 +213,20 @@ async def all_balance(interaction: discord.Interaction):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
+    await interaction.response.defer(ephemeral=True)
+
     guild = interaction.guild
     if guild is None:
-        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
+        return await interaction.followup.send("サーバー内で実行してください", ephemeral=True)
 
     members = [m for m in guild.members if not m.bot]
 
+    if not members:
+        return await interaction.followup.send("ユーザーがいません", ephemeral=True)
+
     view = BalanceView(members, interaction.user.id)
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         view.get_page_content(),
         view=view,
         ephemeral=True
