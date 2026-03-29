@@ -58,12 +58,12 @@ def get_symbol_table(setting):
 # 倍率
 # -----------------
 symbol_rate = {
-    "🍒": 1.1,
-    "🍋": 1.4,
-    "🍉": 2.0,
-    "⭐": 3.5,
-    "💎": 6,
-    "7️⃣": 18
+    "🍒": 1.05,
+    "🍋": 1.3,
+    "🍉": 1.9,
+    "⭐": 3.2,
+    "💎": 5.5,
+    "7️⃣": 16
 }
 
 
@@ -85,12 +85,12 @@ def generate_grid(setting):
     grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
     bonus_rate = {
-        1: 0.01,
-        2: 0.015,
-        3: 0.02,
-        4: 0.03,
-        5: 0.05,
-        6: 0.08
+        1: 0.008,
+        2: 0.012,
+        3: 0.018,
+        4: 0.025,
+        5: 0.035,
+        6: 0.05
     }
 
     if random.random() < bonus_rate.get(setting, 0.02):
@@ -113,7 +113,7 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（修正版）
+# スロット本体
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -142,7 +142,6 @@ def slot(user_id: str, bet: int):
 
     profit = win - bet
 
-    # 軽い負け補正
     if profit < 0 and random.random() < 0.05:
         profit -= int(bet * 0.3)
 
@@ -150,7 +149,6 @@ def slot(user_id: str, bet: int):
     if profit > MAX_PROFIT:
         profit = MAX_PROFIT
 
-    # ★ここだけで反映（重要）
     add_money(user_id, profit)
 
     new_balance = get_money(user_id)
