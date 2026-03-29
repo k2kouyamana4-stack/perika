@@ -272,21 +272,26 @@ async def all_reset(interaction: discord.Interaction):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
+    # ★必須：先に応答確保
+    await interaction.response.defer(ephemeral=True)
+
     guild = interaction.guild
     if guild is None:
-        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
+        return await interaction.followup.send("サーバー内で実行してください", ephemeral=True)
+
+    # ★完全取得（抜け防止）
+    await guild.chunk()
+
+    members = [m for m in guild.members if not m.bot]
 
     count = 0
 
-    for member in guild.members:
-        if member.bot:
-            continue
-
+    for member in members:
         money = get_money(str(member.id))
         add_money(str(member.id), -money)
         count += 1
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"全員の残高を0にしました\n対象: {count}人",
         ephemeral=True
     )
