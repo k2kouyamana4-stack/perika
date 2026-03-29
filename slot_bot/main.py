@@ -206,6 +206,9 @@ async def ev_view(interaction: discord.Interaction):
 
     await interaction.response.defer()
 
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.followup.send("❌ 管理者のみ")
+
     ev = get_ev_setting()
     mode = get_mode()
 
