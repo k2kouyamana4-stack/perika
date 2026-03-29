@@ -242,22 +242,27 @@ async def all_adjust(interaction: discord.Interaction, amount: int):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
+    # ★必須
+    await interaction.response.defer(ephemeral=True)
+
     guild = interaction.guild
     if guild is None:
-        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
+        return await interaction.followup.send("サーバー内で実行してください", ephemeral=True)
+
+    # ★完全取得（抜け防止）
+    await guild.chunk()
+
+    members = [m for m in guild.members if not m.bot]
 
     count = 0
 
-    for member in guild.members:
-        if member.bot:
-            continue
-
+    for member in members:
         add_money(str(member.id), amount)
         count += 1
 
     sign = "+" if amount >= 0 else ""
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"全員に {sign}{amount}ペリカ\n対象: {count}人",
         ephemeral=True
     )
