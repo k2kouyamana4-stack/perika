@@ -10,7 +10,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from shared.db import get_money, add_money, get_setting, set_setting
+from shared.db import get_money, set_money, get_setting, set_setting
 
 
 # -----------------
@@ -131,25 +131,24 @@ def slot(user_id: str, bet: int):
     if balance < bet:
         return "残高不足"
 
-    # ★BETは必ず先に消費される前提で計算
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
-    profit = win - bet   # ←ここで必ずBETが差し引かれる
+    profit = win - bet
 
-    # 任意ペナルティ（負け時のみ）
+    # 任意ペナルティ
     if profit < 0 and random.random() < 0.05:
         profit -= int(bet * 0.3)
 
-    # ★残高がマイナスにならないよう制御
+    # ❗重要：DBは「差分」じゃなく「絶対値」で更新
     new_balance = balance + profit
 
+    # 借金防止
     if new_balance < 0:
-        profit = -balance
         new_balance = 0
 
-    add_money(user_id, profit)
+    set_money(user_id, new_balance)
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -190,20 +189,22 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# コマンド（全defer対応）
+# コマンド
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
 
-    if bet <= 0:
-        return await interaction.response.send_message("1以上", ephemeral=True)
-
-    if get_money(user_id) < bet:
-        return await interaction.response.send_message("残高不足", ephemeral=True)
-
     await interaction.response.defer()
+
+    balance = get_money(user_id)
+
+    if bet <= 0:
+        return await interaction.followup.send("1以上")
+
+    if balance < bet:
+        return await interaction.followup.send("残高不足")
 
     result = slot(user_id, bet)
 
@@ -237,7 +238,7 @@ async def show_setting(interaction: discord.Interaction):
 
 
 # -----------------
-# テストスロット（修正版）
+# テストスロット
 # -----------------
 @bot.tree.command(name="テストスロット")
 @app_commands.describe(bet="ベット額", times="回数（最大1000）")
@@ -258,14 +259,10 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
         multiplier = calc_multiplier(grid)
 
         win = int(bet * multiplier)
+        profit = win - bet
 
         if multiplier > 1:
             hit_count += 1
-
-        profit = win - bet
-
-        if profit < 0 and random.random() < 0.05:
-            profit -= int(bet * 0.3)
 
         total_profit += profit
 
