@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from shared.db import get_money, add_money, get_setting, set_setting
 
+
 # -----------------
 # Flask
 # -----------------
@@ -26,6 +27,7 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
+
 # -----------------
 # Bot
 # -----------------
@@ -36,8 +38,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
+
 # -----------------
-# 🎰 設定別確率（完成版バランス）
+# 設定別確率
 # -----------------
 def get_symbol_table(setting):
     tables = {
@@ -50,8 +53,9 @@ def get_symbol_table(setting):
     }
     return tables.get(setting, tables[3])
 
+
 # -----------------
-# 🎰 倍率（微勝ち調整）
+# 倍率
 # -----------------
 symbol_rate = {
     "🍒": 1.1,
@@ -62,6 +66,7 @@ symbol_rate = {
     "7️⃣": 18
 }
 
+
 # -----------------
 # 抽選
 # -----------------
@@ -71,8 +76,9 @@ def weighted_choice(table):
         pool.extend([symbol] * int(weight * 10))
     return random.choice(pool)
 
+
 # -----------------
-# 生成（弱ボーナス）
+# 生成
 # -----------------
 def generate_grid(setting):
     table = get_symbol_table(setting)
@@ -93,8 +99,9 @@ def generate_grid(setting):
 
     return grid
 
+
 # -----------------
-# 倍率計算（中央1ライン）
+# 倍率計算
 # -----------------
 def calc_multiplier(grid):
     line = [grid[1][0], grid[1][1], grid[1][2]]
@@ -104,8 +111,9 @@ def calc_multiplier(grid):
 
     return 1
 
+
 # -----------------
-# スロット本体（楽しいバランス）
+# スロット本体（修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -119,7 +127,10 @@ def slot(user_id: str, bet: int):
     if setting not in [1,2,3,4,5,6]:
         setting = 3
 
-    add_money(user_id, -bet)
+    balance = get_money(user_id)
+
+    if balance < bet:
+        return "残高不足"
 
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
@@ -138,11 +149,11 @@ def slot(user_id: str, bet: int):
     MAX_PROFIT = bet * 30
     if profit > MAX_PROFIT:
         profit = MAX_PROFIT
-        win = bet + profit
 
-    add_money(user_id, win + (profit - (win - bet)))
+    # ★ここだけで反映（重要）
+    add_money(user_id, profit)
 
-    balance = get_money(user_id)
+    new_balance = get_money(user_id)
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -152,8 +163,9 @@ def slot(user_id: str, bet: int):
         f"🎰 BET: {bet}ペリカ\n"
         f"🎰 x{multiplier}\n"
         f"💰 {sign}{profit}ペリカ\n"
-        f"🏦 残高: {balance}ペリカ"
+        f"🏦 残高: {new_balance}ペリカ"
     )
+
 
 # -----------------
 # UI
@@ -180,6 +192,7 @@ class SlotView(discord.ui.View):
         await interaction.response.edit_message(content="終了", view=None)
         self.stop()
 
+
 # -----------------
 # コマンド
 # -----------------
@@ -198,6 +211,7 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     await interaction.response.send_message(result, view=SlotView(user_id, bet))
 
+
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
@@ -210,6 +224,7 @@ async def set_slot(interaction: discord.Interaction, value: int):
     set_setting(value)
     await interaction.response.send_message(f"設定: {value}")
 
+
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
@@ -218,8 +233,9 @@ async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
 
+
 # -----------------
-# テストコマンド
+# テストスロット
 # -----------------
 @bot.tree.command(name="テストスロット")
 @app_commands.describe(bet="ベット額", times="回数（最大1000）")
@@ -227,12 +243,6 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
 
     if interaction.user.id not in ADMIN_IDS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
-
-    if bet <= 0:
-        return await interaction.response.send_message("betは1以上", ephemeral=True)
-
-    if times < 1 or times > 1000:
-        return await interaction.response.send_message("回数は1〜1000", ephemeral=True)
 
     await interaction.response.defer(ephemeral=True)
 
@@ -261,7 +271,7 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
 
     avg = total_profit / times
 
-    result = (
+    await interaction.followup.send(
         f"🎰 テスト結果\n"
         f"回数: {times}\n"
         f"BET: {bet}\n"
@@ -272,7 +282,6 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
         f"当たり率: {round(hit_count/times*100,1)}%"
     )
 
-    await interaction.followup.send(result, ephemeral=True)
 
 # -----------------
 # 起動
