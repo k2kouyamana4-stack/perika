@@ -20,7 +20,7 @@ from shared.db import (
 )
 
 # =========================
-# Flask
+# Flask（Render対策）
 # =========================
 app = Flask(__name__)
 
@@ -45,7 +45,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # =========================
-# スロット本体（完全維持）
+# スロット設定
 # =========================
 def get_symbol_table(setting):
     return {
@@ -55,7 +55,7 @@ def get_symbol_table(setting):
         4: [("🍒", 78), ("🍋", 18), ("🍉", 2.5), ("⭐", 0.7), ("💎", 0.15), ("7️⃣", 0.05)],
         5: [("🍒", 75), ("🍋", 20), ("🍉", 3), ("⭐", 1), ("💎", 0.2), ("7️⃣", 0.08)],
         6: [("🍒", 72), ("🍋", 21), ("🍉", 4), ("⭐", 1.5), ("💎", 0.3), ("7️⃣", 0.1)],
-    }.get(setting, [("🍒", 85), ("🍋", 14), ("🍉", 0.8), ("⭐", 0.15), ("💎", 0.04), ("7️⃣", 0.01)])
+    }.get(setting, [("🍒", 80), ("🍋", 17), ("🍉", 2), ("⭐", 0.5), ("💎", 0.1), ("7️⃣", 0.03)])
 
 
 symbol_rate = {
@@ -101,7 +101,7 @@ def calc_multiplier(grid):
 
 
 # =========================
-# スロット本体（EV追加のみ）
+# スロット実行
 # =========================
 def run_slot(user_id: str, bet: int):
 
@@ -116,19 +116,15 @@ def run_slot(user_id: str, bet: int):
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
-    # =========================
-    # EV / MODE（追加部分）
-    # =========================
     ev = get_ev_setting()
-
     mode = get_mode()
+
     variance = {
         "rang": 1.8,
         "fixg": 0.9
     }.get(mode, 1.0)
 
     win = int(bet * multiplier * ev * variance)
-    # =========================
 
     add_money(user_id, win)
 
@@ -155,20 +151,20 @@ class SlotView(discord.ui.View):
 
     def __init__(self, user_id, bet):
         super().__init__()
-        self.user_id = user_id
+        self.user_id = int(user_id)
         self.bet = bet
 
     @discord.ui.button(label="もう一回", style=discord.ButtonStyle.green)
-    async def again(self, interaction, button):
+    async def again(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-        if str(interaction.user.id) != self.user_id:
+        if interaction.user.id != self.user_id:
             return await interaction.response.send_message("他人不可", ephemeral=True)
 
         result = run_slot(self.user_id, self.bet)
         await interaction.response.edit_message(content=result, view=self)
 
     @discord.ui.button(label="やめる", style=discord.ButtonStyle.red)
-    async def stop(self, interaction, button):
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         await interaction.response.edit_message(content="終了", view=None)
         self.stop()
@@ -204,15 +200,13 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 @bot.tree.command(name="ev確認")
 async def ev_view(interaction: discord.Interaction):
 
-    await interaction.response.defer()
-
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.followup.send("❌ 管理者のみ")
+        return await interaction.response.send_message("❌ 管理者のみ", ephemeral=True)
 
     ev = get_ev_setting()
     mode = get_mode()
 
-    await interaction.followup.send(
+    await interaction.response.send_message(
         f"🎰 EV: {ev}\nMODE: {mode}"
     )
 
@@ -223,60 +217,17 @@ async def ev_view(interaction: discord.Interaction):
 @bot.tree.command(name="モード変更")
 async def mode_change(interaction: discord.Interaction, mode: str):
 
-    await interaction.response.defer()
-
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.followup.send("❌ 管理者のみ")
+        return await interaction.response.send_message("❌ 管理者のみ", ephemeral=True)
 
     if mode not in ["rang", "fixg"]:
-        return await interaction.followup.send("rang / fixg のみ")
+        return await interaction.response.send_message("rang / fixg のみ", ephemeral=True)
 
     set_mode(mode)
 
-    await interaction.followup.send(f"✅ モード変更: {mode}")
+    await interaction.response.send_message(f"✅ モード変更: {mode}")
 
-@bot.tree.command(name="テストスロット")
-async def test_slot(interaction: discord.Interaction, spins: int = 1000, bet: int = 100):
 
-    await interaction.response.defer()
-
-    if interaction.user.id not in ADMIN_IDS:
-        return await interaction.followup.send("❌ 管理者のみ")
-
-    spins = max(1, min(spins, 1000))
-
-    setting = get_setting()
-    ev = get_ev_setting()
-    mode = get_mode()
-
-    variance = {
-        "rang": 1.8,
-        "fixg": 0.9
-    }.get(mode, 1.0)
-
-    total_profit = 0
-    total_win = 0
-
-    for _ in range(spins):
-
-        grid = generate_grid(setting)
-        multiplier = calc_multiplier(grid)
-
-        win = int(bet * multiplier * ev * variance)
-
-        total_win += win
-        total_profit += (win - bet)
-
-    await interaction.followup.send(
-        f"🧪 テストスロット\n"
-        f"回転:{spins}\n"
-        f"BET:{bet}\n"
-        f"EV:{ev}\n"
-        f"MODE:{mode}\n"
-        f"合計払戻:{total_win}\n"
-        f"合計損益:{total_profit}\n"
-        f"平均損益:{total_profit // spins}"
-    )
 # =========================
 # 起動
 # =========================
