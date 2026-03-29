@@ -8,56 +8,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import discord
 from discord.ext import commands
-from supabase import create_client
 
-
-# =========================
-# Supabase
-# =========================
-supabase = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_KEY")
+from db import (
+    get_money,
+    add_money,
+    get_setting,
+    set_setting,
+    get_ev_setting,
+    get_mode,
+    set_mode
 )
-
-
-def get_money(user_id: str):
-    res = supabase.table("users").select("money").eq("user_id", user_id).execute()
-
-    if not res.data:
-        supabase.table("users").insert({
-            "user_id": user_id,
-            "money": 30000
-        }).execute()
-        return 30000
-
-    return res.data[0]["money"]
-
-
-def add_money(user_id: str, amount: int):
-    supabase.table("users").update({
-        "money": get_money(user_id) + amount
-    }).eq("user_id", user_id).execute()
-
-
-def get_setting():
-    res = supabase.table("settings").select("value").eq("key", "slot").execute()
-
-    if not res.data:
-        supabase.table("settings").insert({
-            "key": "slot",
-            "value": 3
-        }).execute()
-        return 3
-
-    return int(res.data[0]["value"])
-
-
-def set_setting(value: int):
-    supabase.table("settings").upsert({
-        "key": "slot",
-        "value": value
-    }).execute()
-
 
 # =========================
 # Flask
@@ -85,7 +45,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # =========================
-# スロットロジック（変更なし）
+# スロット本体（完全維持）
 # =========================
 def get_symbol_table(setting):
     return {
@@ -134,14 +94,15 @@ LINES = [
 
 def calc_multiplier(grid):
     total = 0
-
     for a,b,c in LINES:
         if grid[a][0] == grid[b][1] == grid[c][2]:
             total += symbol_rate.get(grid[a][0], 1)
-
     return total
 
 
+# =========================
+# スロット本体（EV追加のみ）
+# =========================
 def run_slot(user_id: str, bet: int):
 
     setting = get_setting()
@@ -155,7 +116,19 @@ def run_slot(user_id: str, bet: int):
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
-    win = int(bet * multiplier)
+    # =========================
+    # EV / MODE（追加部分）
+    # =========================
+    ev = get_ev_setting()
+
+    mode = get_mode()
+    variance = {
+        "rang": 1.8,
+        "fixg": 0.9
+    }.get(mode, 1.0)
+
+    win = int(bet * multiplier * ev * variance)
+    # =========================
 
     add_money(user_id, win)
 
@@ -226,40 +199,39 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 
 
 # =========================
-# 設定確認
+# EV確認
 # =========================
-@bot.tree.command(name="設定確認")
-async def setting_view(interaction: discord.Interaction):
+@bot.tree.command(name="ev確認")
+async def ev_view(interaction: discord.Interaction):
 
     await interaction.response.defer()
 
-    value = get_setting()
+    ev = get_ev_setting()
+    mode = get_mode()
 
-    await interaction.followup.send(f"🎰 現在のスロット設定：{value}")
+    await interaction.followup.send(
+        f"🎰 EV: {ev}\nMODE: {mode}"
+    )
 
 
 # =========================
-# 設定変更（管理者のみ）
+# モード変更
 # =========================
-@bot.tree.command(name="設定変更")
-async def setting_change(interaction: discord.Interaction, value: int):
+@bot.tree.command(name="モード変更")
+async def mode_change(interaction: discord.Interaction, mode: str):
 
     await interaction.response.defer()
 
     if interaction.user.id not in ADMIN_IDS:
         return await interaction.followup.send("❌ 管理者のみ")
 
-    if value < 1 or value > 6:
-        return await interaction.followup.send("1〜6のみ")
+    if mode not in ["rang", "fixg"]:
+        return await interaction.followup.send("rang / fixg のみ")
 
-    set_setting(value)
+    set_mode(mode)
 
-    await interaction.followup.send(f"✅ 設定を{value}に変更しました")
+    await interaction.followup.send(f"✅ モード変更: {mode}")
 
-
-# =========================
-# テストスロット（最大1000回転）
-# =========================
 @bot.tree.command(name="テストスロット")
 async def test_slot(interaction: discord.Interaction, spins: int = 1000, bet: int = 100):
 
@@ -268,9 +240,16 @@ async def test_slot(interaction: discord.Interaction, spins: int = 1000, bet: in
     if interaction.user.id not in ADMIN_IDS:
         return await interaction.followup.send("❌ 管理者のみ")
 
-    spins = min(spins, 1000)
+    spins = max(1, min(spins, 1000))
 
     setting = get_setting()
+    ev = get_ev_setting()
+    mode = get_mode()
+
+    variance = {
+        "rang": 1.8,
+        "fixg": 0.9
+    }.get(mode, 1.0)
 
     total_profit = 0
     total_win = 0
@@ -280,19 +259,21 @@ async def test_slot(interaction: discord.Interaction, spins: int = 1000, bet: in
         grid = generate_grid(setting)
         multiplier = calc_multiplier(grid)
 
-        win = int(bet * multiplier)
+        win = int(bet * multiplier * ev * variance)
+
         total_win += win
         total_profit += (win - bet)
 
     await interaction.followup.send(
-        f"🧪 テスト結果\n"
+        f"🧪 テストスロット\n"
         f"回転:{spins}\n"
         f"BET:{bet}\n"
+        f"EV:{ev}\n"
+        f"MODE:{mode}\n"
         f"合計払戻:{total_win}\n"
-        f"合計損益:{total_profit}"
+        f"合計損益:{total_profit}\n"
+        f"平均損益:{total_profit // spins}"
     )
-
-
 # =========================
 # 起動
 # =========================

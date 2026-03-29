@@ -63,3 +63,45 @@ def set_setting(value: int):
         "key": "slot",
         "value": value
     }).execute()
+
+    # -----------------
+# EV取得（新規追加）
+# -----------------
+def get_ev_setting():
+    res = supabase.table("settings") \
+        .select("value") \
+        .eq("key", "ev") \
+        .execute()
+
+    if not res.data:
+        supabase.table("settings").insert({
+            "key": "ev",
+            "value": 3
+        }).execute()
+        return 3
+
+    return int(res.data[0]["value"])
+
+# -----------------
+# モード取得（新規追加）
+# -----------------
+def get_mode():
+    res = supabase.table("settings") \
+        .select("value") \
+        .eq("key", "mode") \
+        .execute()
+
+    if not res.data:
+        supabase.table("settings").insert({
+            "key": "mode",
+            "value": "fixg"
+        }).execute()
+        return "fixg"
+
+    return res.data[0]["value"]
+
+def set_mode(mode: str):
+    supabase.table("settings").upsert({
+        "key": "mode",
+        "value": mode
+    }).execute()
