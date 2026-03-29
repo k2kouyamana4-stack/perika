@@ -116,7 +116,14 @@ def run_slot(user_id: str, bet: int):
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
-    ev = get_ev_setting()
+    # =========================
+    # EV（範囲対応）
+    # =========================
+    ev_min = float(get_setting("ev_min"))
+    ev_max = float(get_setting("ev_max"))
+    ev = random.uniform(ev_min, ev_max)
+    # =========================
+
     mode = get_mode()
 
     variance = {
@@ -203,11 +210,12 @@ async def ev_view(interaction: discord.Interaction):
     if interaction.user.id not in ADMIN_IDS:
         return await interaction.response.send_message("❌ 管理者のみ", ephemeral=True)
 
-    ev = get_ev_setting()
+    ev_min = get_setting("ev_min")
+    ev_max = get_setting("ev_max")
     mode = get_mode()
 
     await interaction.response.send_message(
-        f"🎰 EV: {ev}\nMODE: {mode}"
+        f"🎰 EV: {ev_min} ~ {ev_max}\nMODE: {mode}"
     )
 
 
