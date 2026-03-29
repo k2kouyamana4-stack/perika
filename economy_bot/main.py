@@ -186,7 +186,39 @@ async def all_balance(interaction: discord.Interaction):
 
     await interaction.followup.send(msg, ephemeral=True)
 
+# -----------------
+# /全員増減（管理者のみ）
+# -----------------
+@bot.tree.command(name="全員増減")
+@app_commands.describe(amount="増減金額（マイナス可）")
+async def all_adjust(interaction: discord.Interaction, amount: int):
 
+    if interaction.user.id not in ADMINS:
+        await interaction.response.send_message("権限がありません", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    data = get_ranking()
+
+    count = 0
+
+    for row in data:
+        user_id = row.get("user_id")
+        if not user_id:
+            continue
+
+        add_money(str(user_id), amount)
+        count += 1
+
+    sign = "+" if amount >= 0 else ""
+
+    await interaction.followup.send(
+        f"全ユーザーに {sign}{amount}ペリカ {'配布' if amount >= 0 else '減額'} 完了\n"
+        f"対象人数: {count}人",
+        ephemeral=True
+    )
+    
 # -----------------
 # 起動
 # -----------------
