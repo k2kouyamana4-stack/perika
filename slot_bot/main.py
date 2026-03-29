@@ -66,9 +66,6 @@ symbol_rate = {
 }
 
 
-# -----------------
-# ランダム選択
-# -----------------
 def weighted_choice(table):
     pool = []
     for symbol, weight in table:
@@ -76,9 +73,6 @@ def weighted_choice(table):
     return random.choice(pool)
 
 
-# -----------------
-# スロット生成
-# -----------------
 def generate_grid(setting):
     table = get_symbol_table(setting)
     grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
@@ -99,9 +93,6 @@ def generate_grid(setting):
     return grid
 
 
-# -----------------
-# 倍率計算
-# -----------------
 def calc_multiplier(grid):
     line = grid[1]
     if line[0] == line[1] == line[2]:
@@ -110,7 +101,7 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（完全版）
+# スロット本体（修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -129,20 +120,18 @@ def slot(user_id: str, bet: int):
     if balance < bet:
         return "残高不足"
 
+    # ★ここ重要：先にベットを引く
+    add_money(user_id, -bet)
+
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
-    profit = win - bet
-
-    # 少しブレ
-    if profit < 0 and random.random() < 0.05:
-        profit -= int(bet * 0.3)
-
-    # 🔥ここが重要（DB更新）
-    add_money(user_id, profit)
+    add_money(user_id, win)
 
     new_balance = get_money(user_id)
+
+    profit = win - bet
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -241,7 +230,6 @@ async def show_setting(interaction: discord.Interaction):
 # テストスロット
 # -----------------
 @bot.tree.command(name="テストスロット")
-@app_commands.describe(bet="ベット額", times="回数（最大1000）")
 async def test_slot(interaction: discord.Interaction, bet: int, times: int):
 
     if interaction.user.id not in ADMIN_IDS:
