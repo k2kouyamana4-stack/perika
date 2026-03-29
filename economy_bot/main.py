@@ -10,9 +10,6 @@ from discord.ext import commands
 from flask import Flask
 from threading import Thread
 
-import asyncio
-from datetime import datetime
-
 from config import TOKEN, ADMINS
 from shared.db import get_money, add_money, get_ranking
 
@@ -100,7 +97,10 @@ async def ranking(interaction: discord.Interaction):
 
     msg = "💰ランキング💰\n"
 
-    for i, (user_id, money) in enumerate(data, start=1):
+    for i, row in enumerate(data, start=1):
+        user_id = row.get("user_id")
+        money = row.get("money", 0)
+
         try:
             user = await bot.fetch_user(int(user_id))
             name = user.name
@@ -132,21 +132,17 @@ async def admin_balance(interaction: discord.Interaction, member: discord.Member
 
 
 # -----------------
-# /管理調整（増減コマンド）
+# /管理調整（増減）
 # -----------------
 @bot.tree.command(name="管理調整")
-@app_commands.describe(
-    member="対象ユーザー",
-    amount="増減金額（マイナスで減少）"
-)
+@app_commands.describe(member="対象ユーザー", amount="増減金額")
 async def admin_adjust(interaction: discord.Interaction, member: discord.Member, amount: int):
 
     if interaction.user.id not in ADMINS:
         await interaction.response.send_message("権限がありません", ephemeral=True)
         return
 
-    target = str(member.id)
-    add_money(target, amount)
+    add_money(str(member.id), amount)
 
     result = "増加" if amount >= 0 else "減少"
 
@@ -157,7 +153,7 @@ async def admin_adjust(interaction: discord.Interaction, member: discord.Member,
 
 
 # -----------------
-# /全残高一覧（管理者のみ）
+# /全残高一覧（Supabase対応版）
 # -----------------
 @bot.tree.command(name="全残高一覧")
 async def all_balance(interaction: discord.Interaction):
@@ -174,7 +170,10 @@ async def all_balance(interaction: discord.Interaction):
 
     msg = "💰全ユーザー残高一覧💰\n"
 
-    for i, (user_id, money) in enumerate(data, start=1):
+    for i, row in enumerate(data, start=1):
+        user_id = row.get("user_id")
+        money = row.get("money", 0)
+
         try:
             user = await bot.fetch_user(int(user_id))
             name = user.name

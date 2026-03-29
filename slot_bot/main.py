@@ -40,7 +40,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# 🎰 確率テーブル（本格版）
+# 🎰 確率テーブル
 # -----------------
 SYMBOL_TABLE = [
     ("🍒", 40),
@@ -50,9 +50,6 @@ SYMBOL_TABLE = [
     ("💎", 2),
     ("7️⃣", 0.5)
 ]
-
-SYMBOLS = [s[0] for s in SYMBOL_TABLE]
-
 
 symbol_rate = {
     "🍒": 1.5,
@@ -75,13 +72,13 @@ def weighted_choice():
 
 
 # -----------------
-# 3×3生成（調整済み）
+# 3×3生成
 # -----------------
 def generate_grid():
 
     grid = [[weighted_choice() for _ in range(3)] for _ in range(3)]
 
-    # たまにライン揃い演出
+    # たまに揃い演出
     if random.random() < 0.12:
         symbol = weighted_choice()
         row = random.randint(0, 2)
@@ -91,7 +88,7 @@ def generate_grid():
 
 
 # -----------------
-# マルチプライヤー計算
+# 倍率計算
 # -----------------
 def calc_multiplier(grid):
 
@@ -118,16 +115,17 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（完全修正版）
+# スロット本体（修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
     setting = get_setting()
 
-    if setting not in SYMBOLS:
+    # ★修正ポイント（数字で判定）
+    if setting not in [1, 2, 3, 4, 5, 6]:
         return "1~6で選択してください"
 
-    # 先にベットを引く
+    # ベット消費
     add_money(user_id, -bet)
 
     grid = generate_grid()
@@ -136,7 +134,7 @@ def slot(user_id: str, bet: int):
     win = int(bet * multiplier)
     profit = win - bet
 
-    # 上限（暴走防止）
+    # 上限
     MAX_PROFIT = bet * 50
     if profit > MAX_PROFIT:
         profit = MAX_PROFIT
@@ -157,7 +155,7 @@ def slot(user_id: str, bet: int):
 
 
 # -----------------
-# スロットコマンド
+# ボタンUI
 # -----------------
 class SlotView(discord.ui.View):
 
@@ -227,7 +225,7 @@ async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
 
 
 # -----------------
-# 設定変更
+# /設定変更
 # -----------------
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
@@ -240,7 +238,7 @@ async def set_slot(interaction: discord.Interaction, value: int):
 
 
 # -----------------
-# 設定確認
+# /設定確認
 # -----------------
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
