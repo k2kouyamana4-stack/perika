@@ -7,7 +7,6 @@ from flask import Flask
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from shared.db import get_money, add_money, get_setting, set_setting
@@ -32,14 +31,13 @@ def run_web():
 # -----------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
 
 ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# スロット設定
+# スロット
 # -----------------
 def get_symbol_table(setting):
     tables = {
@@ -65,8 +63,8 @@ symbol_rate = {
 
 def weighted_choice(table):
     pool = []
-    for symbol, weight in table:
-        pool.extend([symbol] * int(weight * 10))
+    for s, w in table:
+        pool.extend([s] * int(w * 10))
     return random.choice(pool)
 
 
@@ -98,9 +96,9 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（安定版）
+# スロット本体（完全安定版）
 # -----------------
-def slot(user_id: str, bet: int):
+def run_slot(user_id: str, bet: int):
 
     setting = int(get_setting())
     balance = get_money(user_id)
@@ -108,16 +106,20 @@ def slot(user_id: str, bet: int):
     if balance < bet:
         return "残高不足"
 
+    # ★重要：先に引く
+    add_money(user_id, -bet)
+
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
-    profit = win - bet
 
-    # ★1回で更新（重要）
-    add_money(user_id, profit)
+    # ★追加分だけ入れる
+    add_money(user_id, win)
 
     new_balance = get_money(user_id)
+
+    profit = win - bet
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -127,7 +129,7 @@ def slot(user_id: str, bet: int):
         f"🎰 BET: {bet}\n"
         f"🎰 x{round(multiplier,2)}\n"
         f"💰 {sign}{profit}\n"
-        f"🏦 残高: {new_balance}"
+        f"🏦 {new_balance}"
     )
 
 
@@ -147,12 +149,11 @@ class SlotView(discord.ui.View):
         if str(interaction.user.id) != self.user_id:
             return await interaction.response.send_message("他人は操作できない", ephemeral=True)
 
-        result = slot(self.user_id, self.bet)
+        result = run_slot(self.user_id, self.bet)
         await interaction.response.edit_message(content=result, view=self)
 
     @discord.ui.button(label="やめる", style=discord.ButtonStyle.red)
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
-
         await interaction.response.edit_message(content="終了", view=None)
         self.stop()
 
@@ -164,17 +165,17 @@ class SlotView(discord.ui.View):
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
-    await interaction.response.defer()
 
-    balance = get_money(user_id)
+    await interaction.response.defer()
 
     if bet <= 0:
         return await interaction.followup.send("1以上")
 
-    if balance < bet:
+    if get_money(user_id) < bet:
         return await interaction.followup.send("残高不足")
 
-    result = slot(user_id, bet)
+    result = run_slot(user_id, bet)
+
     await interaction.followup.send(result, view=SlotView(user_id, bet))
 
 
