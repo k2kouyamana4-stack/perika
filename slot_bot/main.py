@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import discord
 from discord.ext import commands
 
-from db import (
+from shared.db import (
     get_money,
     add_money,
     get_setting,
