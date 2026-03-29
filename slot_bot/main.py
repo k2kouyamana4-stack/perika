@@ -85,12 +85,12 @@ def generate_grid(setting):
     grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
     bonus_rate = {
-        1: 0.008,
-        2: 0.012,
-        3: 0.018,
-        4: 0.025,
-        5: 0.035,
-        6: 0.05
+        1: 0.010,
+        2: 0.014,
+        3: 0.030,
+        4: 0.028,
+        5: 0.038,
+        6: 0.055
     }
 
     if random.random() < bonus_rate.get(setting, 0.02):
@@ -104,7 +104,7 @@ def generate_grid(setting):
 # 倍率計算
 # -----------------
 def calc_multiplier(grid):
-    line = [grid[1][0], grid[1][1], grid[1][2]]
+    line = grid[1]
 
     if line[0] == line[1] == line[2]:
         return round(symbol_rate.get(line[0], 1), 2)
@@ -205,31 +205,37 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
     if get_money(user_id) < bet:
         return await interaction.response.send_message("残高不足", ephemeral=True)
 
+    await interaction.response.defer()
+
     result = slot(user_id, bet)
 
-    await interaction.response.send_message(result, view=SlotView(user_id, bet))
+    await interaction.followup.send(result, view=SlotView(user_id, bet))
 
 
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
+    await interaction.response.defer(ephemeral=True)
+
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message("権限がありません", ephemeral=True)
+        return await interaction.followup.send("権限がありません")
 
     if value not in [1,2,3,4,5,6]:
-        return await interaction.response.send_message("1~6で選択してください", ephemeral=True)
+        return await interaction.followup.send("1~6で選択してください")
 
     set_setting(value)
-    await interaction.response.send_message(f"設定: {value}")
+    await interaction.followup.send(f"設定: {value}")
 
 
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
-    if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message("権限がありません", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
-    await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.followup.send("権限がありません")
+
+    await interaction.followup.send(f"{get_setting()}")
 
 
 # -----------------
