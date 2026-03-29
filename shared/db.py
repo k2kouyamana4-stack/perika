@@ -110,3 +110,18 @@ def set_mode(value: str):
         "key": "mode",
         "value": value
     }).execute()
+
+
+# =========================
+# 汎用設定取得（EV範囲用）
+# =========================
+def get_setting(key: str):
+    res = supabase.table("settings") \
+        .select("value") \
+        .eq("key", key) \
+        .execute()
+
+    if not res.data:
+        return None
+
+    return res.data[0]["value"]
