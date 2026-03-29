@@ -243,6 +243,12 @@ async def set_slot(interaction: discord.Interaction, value: int):
 
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message(
+            "何見ようとしてんねん殺すぞ",
+            ephemeral=True
+        )
     await interaction.response.send_message(f"{get_setting()}")
 
 
