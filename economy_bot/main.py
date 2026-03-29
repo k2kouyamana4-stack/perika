@@ -11,7 +11,7 @@ from flask import Flask
 from threading import Thread
 
 from config import TOKEN, ADMINS
-from shared.db import get_money, add_money, get_ranking
+from shared.db import get_money, add_money
 
 
 # -----------------
@@ -49,42 +49,39 @@ async def on_ready():
 
 
 # -----------------
-# ページUI（メンション版）
+# ページUI（全員版）
 # -----------------
 class BalanceView(discord.ui.View):
-    def __init__(self, data, author_id):
+
+    def __init__(self, members, author_id):
         super().__init__(timeout=120)
-        self.data = data
+        self.members = members
         self.author_id = author_id
         self.page = 0
         self.per_page = 10
 
     def get_page_content(self):
+
         start = self.page * self.per_page
         end = start + self.per_page
-        chunk = self.data[start:end]
+        chunk = self.members[start:end]
 
-        max_page = (len(self.data) - 1) // self.per_page + 1
+        max_page = (len(self.members) - 1) // self.per_page + 1
 
         msg = f"💰全ユーザー残高一覧（{self.page+1}/{max_page}ページ）💰\n\n"
 
-        for i, row in enumerate(chunk, start=start+1):
-            user_id = row.get("user_id")
-            money = row.get("money", 0)
-
-            # 🔥 メンション表示
-            msg += f"{i}. <@{user_id}> - {money}ペリカ\n"
+        for i, member in enumerate(chunk, start=start+1):
+            money = get_money(str(member.id))
+            msg += f"{i}. {member.mention} - {money}ペリカ\n"
 
         return msg
 
     async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.user.id != self.author_id:
-            await interaction.response.send_message("操作できません", ephemeral=True)
-            return False
-        return True
+        return interaction.user.id == self.author_id
 
     @discord.ui.button(label="←", style=discord.ButtonStyle.gray)
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button):
+
         if self.page > 0:
             self.page -= 1
 
@@ -95,7 +92,8 @@ class BalanceView(discord.ui.View):
 
     @discord.ui.button(label="→", style=discord.ButtonStyle.gray)
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        max_page = (len(self.data) - 1) // self.per_page
+
+        max_page = (len(self.members) - 1) // self.per_page
 
         if self.page < max_page:
             self.page += 1
@@ -111,6 +109,7 @@ class BalanceView(discord.ui.View):
 # -----------------
 @bot.tree.command(name="残高確認")
 async def balance(interaction: discord.Interaction):
+
     money = get_money(str(interaction.user.id))
 
     await interaction.response.send_message(
@@ -127,15 +126,13 @@ async def balance(interaction: discord.Interaction):
 async def pay(interaction: discord.Interaction, member: discord.Member, amount: int):
 
     if amount <= 0:
-        await interaction.response.send_message("1以上にして", ephemeral=True)
-        return
+        return await interaction.response.send_message("1以上にして", ephemeral=True)
 
     sender = str(interaction.user.id)
     target = str(member.id)
 
     if get_money(sender) < amount:
-        await interaction.response.send_message("ペリカ足りない", ephemeral=True)
-        return
+        return await interaction.response.send_message("ペリカ足りない", ephemeral=True)
 
     add_money(sender, -amount)
     add_money(target, amount)
@@ -146,21 +143,22 @@ async def pay(interaction: discord.Interaction, member: discord.Member, amount: 
 
 
 # -----------------
-# /ランキング
+# /ランキング（DB版）
 # -----------------
 @bot.tree.command(name="ランキング")
 async def ranking(interaction: discord.Interaction):
 
-    data = get_ranking()
+    data = sorted(
+        [(m.id, get_money(str(m.id))) for m in interaction.guild.members if not m.bot],
+        key=lambda x: x[1],
+        reverse=True
+    )
 
     msg = "💰ランキング💰\n"
 
-    for i, row in enumerate(data, start=1):
-        user_id = row.get("user_id")
-        money = row.get("money", 0)
-
+    for i, (user_id, money) in enumerate(data[:10], start=1):
         try:
-            user = await bot.fetch_user(int(user_id))
+            user = await bot.fetch_user(user_id)
             name = user.name
         except:
             name = "不明"
@@ -207,7 +205,7 @@ async def admin_adjust(interaction: discord.Interaction, member: discord.Member,
 
 
 # -----------------
-# /全残高一覧（メンションUI版）
+# /全残高一覧（完全全員版）
 # -----------------
 @bot.tree.command(name="全残高一覧")
 async def all_balance(interaction: discord.Interaction):
@@ -215,12 +213,13 @@ async def all_balance(interaction: discord.Interaction):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
-    data = get_ranking()
+    guild = interaction.guild
+    if guild is None:
+        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
 
-    if not data:
-        return await interaction.response.send_message("データがありません", ephemeral=True)
+    members = [m for m in guild.members if not m.bot]
 
-    view = BalanceView(data, interaction.user.id)
+    view = BalanceView(members, interaction.user.id)
 
     await interaction.response.send_message(
         view.get_page_content(),
@@ -230,7 +229,7 @@ async def all_balance(interaction: discord.Interaction):
 
 
 # -----------------
-# /全員増減
+# /全員増減（完全全員）
 # -----------------
 @bot.tree.command(name="全員増減")
 async def all_adjust(interaction: discord.Interaction, amount: int):
@@ -238,31 +237,29 @@ async def all_adjust(interaction: discord.Interaction, amount: int):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
-    await interaction.response.defer(ephemeral=True)
-
-    data = get_ranking()
+    guild = interaction.guild
+    if guild is None:
+        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
 
     count = 0
 
-    for row in data:
-        user_id = row.get("user_id")
-        if not user_id:
+    for member in guild.members:
+        if member.bot:
             continue
 
-        add_money(str(user_id), amount)
+        add_money(str(member.id), amount)
         count += 1
 
     sign = "+" if amount >= 0 else ""
 
-    await interaction.followup.send(
-        f"全ユーザーに {sign}{amount}ペリカ {'配布' if amount >= 0 else '減額'} 完了\n"
-        f"対象人数: {count}人",
+    await interaction.response.send_message(
+        f"全員に {sign}{amount}ペリカ\n対象: {count}人",
         ephemeral=True
     )
 
 
 # -----------------
-# /全員リセット
+# /全員リセット（完全版）
 # -----------------
 @bot.tree.command(name="全員リセット")
 async def all_reset(interaction: discord.Interaction):
@@ -270,24 +267,22 @@ async def all_reset(interaction: discord.Interaction):
     if interaction.user.id not in ADMINS:
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
-    await interaction.response.defer(ephemeral=True)
-
-    data = get_ranking()
+    guild = interaction.guild
+    if guild is None:
+        return await interaction.response.send_message("サーバー内で実行してください", ephemeral=True)
 
     count = 0
 
-    for row in data:
-        user_id = row.get("user_id")
-        money = row.get("money", 0)
-
-        if not user_id:
+    for member in guild.members:
+        if member.bot:
             continue
 
-        add_money(str(user_id), -money)
+        money = get_money(str(member.id))
+        add_money(str(member.id), -money)
         count += 1
 
-    await interaction.followup.send(
-        f"全ユーザーの残高を0にしました\n対象人数: {count}人",
+    await interaction.response.send_message(
+        f"全員の残高を0にしました\n対象: {count}人",
         ephemeral=True
     )
 
