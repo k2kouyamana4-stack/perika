@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from shared.db import get_money, add_money, get_setting, set_setting
 
+
 # -----------------
 # Flask
 # -----------------
@@ -26,6 +27,7 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
+
 # -----------------
 # Bot
 # -----------------
@@ -36,67 +38,87 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
+
 # -----------------
-# 絵柄
+# 🎰 確率テーブル（本格版）
 # -----------------
-SYMBOLS = {
-    1: "🍒",
-    2: "🍋",
-    3: "🍉",
-    4: "⭐",
-    5: "💎",
-    6: "7️⃣"
+SYMBOL_TABLE = [
+    ("🍒", 40),
+    ("🍋", 30),
+    ("🍉", 20),
+    ("⭐", 8),
+    ("💎", 2),
+    ("7️⃣", 0.5)
+]
+
+SYMBOLS = [s[0] for s in SYMBOL_TABLE]
+
+
+symbol_rate = {
+    "🍒": 1.5,
+    "🍋": 2,
+    "🍉": 3,
+    "⭐": 6,
+    "💎": 12,
+    "7️⃣": 30
 }
 
-ALL_SYMBOLS = list(SYMBOLS.values())
 
 # -----------------
-# 3×3生成
+# 重み付き抽選
+# -----------------
+def weighted_choice():
+    pool = []
+    for symbol, weight in SYMBOL_TABLE:
+        pool.extend([symbol] * int(weight * 10))
+    return random.choice(pool)
+
+
+# -----------------
+# 3×3生成（調整済み）
 # -----------------
 def generate_grid():
-    return [[random.choice(ALL_SYMBOLS) for _ in range(3)] for _ in range(3)]
+
+    grid = [[weighted_choice() for _ in range(3)] for _ in range(3)]
+
+    # たまにライン揃い演出
+    if random.random() < 0.12:
+        symbol = weighted_choice()
+        row = random.randint(0, 2)
+        grid[row] = [symbol, symbol, symbol]
+
+    return grid
+
 
 # -----------------
-# 8ライン判定
+# マルチプライヤー計算
 # -----------------
 def calc_multiplier(grid):
 
     lines = [
-        # 横
         [grid[0][0], grid[0][1], grid[0][2]],
         [grid[1][0], grid[1][1], grid[1][2]],
         [grid[2][0], grid[2][1], grid[2][2]],
 
-        # 縦
         [grid[0][0], grid[1][0], grid[2][0]],
         [grid[0][1], grid[1][1], grid[2][1]],
         [grid[0][2], grid[1][2], grid[2][2]],
 
-        # 斜め
         [grid[0][0], grid[1][1], grid[2][2]],
         [grid[0][2], grid[1][1], grid[2][0]],
     ]
-
-    symbol_rate = {
-        "🍒": 2,
-        "🍋": 3,
-        "🍉": 5,
-        "⭐": 8,
-        "💎": 15,
-        "7️⃣": 30
-    }
 
     score = 0
 
     for line in lines:
         if line[0] == line[1] == line[2]:
-            symbol = line[0]
-            score += symbol_rate.get(symbol, 1)
+            score += symbol_rate.get(line[0], 1)
 
-    return max(1, score)
+    return max(1, round(score, 2))
+
 
 # -----------------
-# スロット本体
+# スロット本体（完全修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -105,18 +127,37 @@ def slot(user_id: str, bet: int):
     if setting not in SYMBOLS:
         return "1~6で選択してください"
 
-    grid = generate_grid()
+    # 先にベットを引く
+    add_money(user_id, -bet)
 
+    grid = generate_grid()
     multiplier = calc_multiplier(grid)
 
-    add_money(user_id, bet * (multiplier - 1))
+    win = int(bet * multiplier)
+    profit = win - bet
+
+    # 上限（暴走防止）
+    MAX_PROFIT = bet * 50
+    if profit > MAX_PROFIT:
+        profit = MAX_PROFIT
+        win = bet + profit
+
+    add_money(user_id, win)
 
     text = "\n".join([" | ".join(row) for row in grid])
 
-    return f"{text}\n🎰 x{multiplier}"
+    sign = "+" if profit >= 0 else ""
+
+    return (
+        f"{text}\n"
+        f"🎰 BET: {bet}ペリカ\n"
+        f"🎰 x{multiplier}\n"
+        f"💰 {sign}{profit}ペリカ"
+    )
+
 
 # -----------------
-# ボタン付きスロット
+# スロットコマンド
 # -----------------
 class SlotView(discord.ui.View):
 
@@ -140,10 +181,11 @@ class SlotView(discord.ui.View):
         await interaction.response.edit_message(content="終了", view=None)
         self.stop()
 
+
 # -----------------
 # /スロット
 # -----------------
-@bot.tree.command(name="スロット", description="スロット")
+@bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
@@ -161,10 +203,11 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
         view=SlotView(user_id, bet)
     )
 
+
 # -----------------
 # /連続スロット
 # -----------------
-@bot.tree.command(name="連続スロット", description="連続スロット")
+@bot.tree.command(name="連続スロット")
 async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
 
     user_id = str(interaction.user.id)
@@ -177,15 +220,16 @@ async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
 
     logs = []
 
-    for i in range(times):
+    for _ in range(times):
         logs.append(slot(user_id, bet))
 
     await interaction.response.send_message("\n\n".join(logs))
 
+
 # -----------------
 # 設定変更
 # -----------------
-@bot.tree.command(name="設定変更", description="設定変更")
+@bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
     if value not in [1,2,3,4,5,6]:
@@ -194,27 +238,28 @@ async def set_slot(interaction: discord.Interaction, value: int):
     set_setting(value)
     await interaction.response.send_message(f"設定: {value}")
 
+
 # -----------------
 # 設定確認
 # -----------------
-@bot.tree.command(name="設定確認", description="設定確認")
+@bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"{get_setting()}")
 
+
 # -----------------
-# 起動イベント
+# 起動
 # -----------------
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print("slot bot ready")
 
-# -----------------
-# 起動
-# -----------------
+
 def run_bot():
     bot.run(TOKEN)
+
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
