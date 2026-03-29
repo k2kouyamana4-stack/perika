@@ -1,6 +1,5 @@
 import sys
 import os
-import asyncio
 import random
 from threading import Thread
 from flask import Flask
@@ -101,19 +100,19 @@ def generate_grid(setting):
 
 
 # -----------------
-# 倍率計算
+# 倍率計算（修正版）
 # -----------------
 def calc_multiplier(grid):
     line = grid[1]
 
     if line[0] == line[1] == line[2]:
-        return round(symbol_rate.get(line[0], 1), 2)
+        return symbol_rate.get(line[0], 1)
 
     return 1
 
 
 # -----------------
-# スロット本体
+# スロット本体（修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -137,11 +136,9 @@ def slot(user_id: str, bet: int):
 
     win = int(bet * multiplier)
 
-    if multiplier == 1:
-        win = 0
-
     profit = win - bet
 
+    # 追加ペナルティ（任意要素）
     if profit < 0 and random.random() < 0.05:
         profit -= int(bet * 0.3)
 
@@ -159,7 +156,7 @@ def slot(user_id: str, bet: int):
     return (
         f"{text}\n"
         f"🎰 BET: {bet}ペリカ\n"
-        f"🎰 x{multiplier}\n"
+        f"🎰 x{round(multiplier,2)}\n"
         f"💰 {sign}{profit}ペリカ\n"
         f"🏦 残高: {new_balance}ペリカ"
     )
@@ -192,7 +189,7 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# コマンド
+# コマンド（全部defer済み）
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
@@ -239,7 +236,7 @@ async def show_setting(interaction: discord.Interaction):
 
 
 # -----------------
-# テストスロット
+# テストスロット（修正版）
 # -----------------
 @bot.tree.command(name="テストスロット")
 @app_commands.describe(bet="ベット額", times="回数（最大1000）")
@@ -261,9 +258,7 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
 
         win = int(bet * multiplier)
 
-        if multiplier == 1:
-            win = 0
-        else:
+        if multiplier > 1:
             hit_count += 1
 
         profit = win - bet
