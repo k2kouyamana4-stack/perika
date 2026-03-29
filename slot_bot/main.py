@@ -78,7 +78,6 @@ def generate_grid():
 
     grid = [[weighted_choice() for _ in range(3)] for _ in range(3)]
 
-    # たまに揃い演出
     if random.random() < 0.12:
         symbol = weighted_choice()
         row = random.randint(0, 2)
@@ -115,15 +114,19 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（修正版）
+# スロット本体（表示改善版）
 # -----------------
 def slot(user_id: str, bet: int):
 
     setting = get_setting()
 
-    # ★修正ポイント（数字で判定）
+    try:
+        setting = int(setting)
+    except:
+        setting = 1
+
     if setting not in [1, 2, 3, 4, 5, 6]:
-        return "1~6で選択してください"
+        setting = 1
 
     # ベット消費
     add_money(user_id, -bet)
@@ -132,6 +135,11 @@ def slot(user_id: str, bet: int):
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
+
+    # ★ x1はハズレ扱い
+    if multiplier == 1:
+        win = 0
+
     profit = win - bet
 
     # 上限
@@ -142,6 +150,9 @@ def slot(user_id: str, bet: int):
 
     add_money(user_id, win)
 
+    # ★ 残高取得
+    balance = get_money(user_id)
+
     text = "\n".join([" | ".join(row) for row in grid])
 
     sign = "+" if profit >= 0 else ""
@@ -150,7 +161,8 @@ def slot(user_id: str, bet: int):
         f"{text}\n"
         f"🎰 BET: {bet}ペリカ\n"
         f"🎰 x{multiplier}\n"
-        f"💰 {sign}{profit}ペリカ"
+        f"💰 {sign}{profit}ペリカ\n"
+        f"🏦 残高: {balance}ペリカ"
     )
 
 

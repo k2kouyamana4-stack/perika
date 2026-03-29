@@ -153,7 +153,7 @@ async def admin_adjust(interaction: discord.Interaction, member: discord.Member,
 
 
 # -----------------
-# /全残高一覧（Supabase対応版）
+# /全残高一覧（修正版）
 # -----------------
 @bot.tree.command(name="全残高一覧")
 async def all_balance(interaction: discord.Interaction):
@@ -162,11 +162,13 @@ async def all_balance(interaction: discord.Interaction):
         await interaction.response.send_message("権限がありません", ephemeral=True)
         return
 
+    # ★ 重要：遅延対策
+    await interaction.response.defer(ephemeral=True)
+
     data = get_ranking()
 
     if not data:
-        await interaction.response.send_message("データがありません", ephemeral=True)
-        return
+        return await interaction.followup.send("データがありません", ephemeral=True)
 
     msg = "💰全ユーザー残高一覧💰\n"
 
@@ -178,11 +180,11 @@ async def all_balance(interaction: discord.Interaction):
             user = await bot.fetch_user(int(user_id))
             name = user.name
         except:
-            name = "不明"
+            name = f"ID:{user_id}"
 
         msg += f"{i}. {name} - {money}ペリカ\n"
 
-    await interaction.response.send_message(msg, ephemeral=True)
+    await interaction.followup.send(msg, ephemeral=True)
 
 
 # -----------------
