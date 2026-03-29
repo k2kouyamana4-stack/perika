@@ -14,7 +14,6 @@ from shared.db import (
     add_money,
     get_setting,
     set_setting,
-    get_ev_setting,
     get_mode,
     set_mode
 )
@@ -95,7 +94,6 @@ def generate_grid(setting):
         row = []
         for _ in range(3):
 
-            # 軽い演出揺らぎ
             if random.random() < 0.08:
                 row.append(random.choice(["🍒", "🍋"]))
             else:
@@ -148,13 +146,9 @@ def run_slot(user_id: str, bet: int):
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
-    # =========================
-    # EV（範囲対応）
-    # =========================
     ev_min = float(get_setting("ev_min"))
     ev_max = float(get_setting("ev_max"))
     ev = random.uniform(ev_min, ev_max)
-    # =========================
 
     mode = get_mode()
 
