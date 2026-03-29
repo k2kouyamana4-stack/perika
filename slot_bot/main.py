@@ -10,7 +10,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from shared.db import get_money, set_money, get_setting, set_setting
+from shared.db import get_money, add_money, get_setting, set_setting
 
 
 # -----------------
@@ -39,7 +39,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# 設定別確率
+# スロット確率テーブル
 # -----------------
 def get_symbol_table(setting):
     tables = {
@@ -67,7 +67,7 @@ symbol_rate = {
 
 
 # -----------------
-# 抽選
+# ランダム選択
 # -----------------
 def weighted_choice(table):
     pool = []
@@ -77,7 +77,7 @@ def weighted_choice(table):
 
 
 # -----------------
-# 生成
+# スロット生成
 # -----------------
 def generate_grid(setting):
     table = get_symbol_table(setting)
@@ -100,19 +100,17 @@ def generate_grid(setting):
 
 
 # -----------------
-# 倍率
+# 倍率計算
 # -----------------
 def calc_multiplier(grid):
     line = grid[1]
-
     if line[0] == line[1] == line[2]:
         return symbol_rate.get(line[0], 1)
-
     return 1
 
 
 # -----------------
-# スロット本体（完全修正版）
+# スロット本体（完全版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -137,18 +135,14 @@ def slot(user_id: str, bet: int):
     win = int(bet * multiplier)
     profit = win - bet
 
-    # 任意ペナルティ
+    # 少しブレ
     if profit < 0 and random.random() < 0.05:
         profit -= int(bet * 0.3)
 
-    # ❗重要：DBは「差分」じゃなく「絶対値」で更新
-    new_balance = balance + profit
+    # 🔥ここが重要（DB更新）
+    add_money(user_id, profit)
 
-    # 借金防止
-    if new_balance < 0:
-        new_balance = 0
-
-    set_money(user_id, new_balance)
+    new_balance = get_money(user_id)
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -189,7 +183,7 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# コマンド
+# スラッシュコマンド
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
@@ -211,6 +205,9 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
     await interaction.followup.send(result, view=SlotView(user_id, bet))
 
 
+# -----------------
+# 設定変更
+# -----------------
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
@@ -226,6 +223,9 @@ async def set_slot(interaction: discord.Interaction, value: int):
     await interaction.followup.send(f"設定: {value}")
 
 
+# -----------------
+# 設定確認
+# -----------------
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
