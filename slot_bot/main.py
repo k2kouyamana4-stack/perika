@@ -85,7 +85,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # =========================
-# スロット
+# スロットロジック（変更なし）
 # =========================
 def get_symbol_table(setting):
     return {
@@ -120,9 +120,6 @@ def generate_grid(setting):
     return [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
 
-# =========================
-# 8ライン
-# =========================
 LINES = [
     (0,0,0),
     (1,1,1),
@@ -145,9 +142,6 @@ def calc_multiplier(grid):
     return total
 
 
-# =========================
-# スロット本体
-# =========================
 def run_slot(user_id: str, bet: int):
 
     setting = get_setting()
@@ -182,7 +176,7 @@ def run_slot(user_id: str, bet: int):
 
 
 # =========================
-# UI（完全復活）
+# UI
 # =========================
 class SlotView(discord.ui.View):
 
@@ -208,7 +202,7 @@ class SlotView(discord.ui.View):
 
 
 # =========================
-# コマンド
+# スロットコマンド
 # =========================
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
@@ -229,6 +223,74 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
         return await interaction.followup.send("❌ 残高不足")
 
     await interaction.followup.send(result, view=SlotView(user_id, bet))
+
+
+# =========================
+# 設定確認
+# =========================
+@bot.tree.command(name="設定確認")
+async def setting_view(interaction: discord.Interaction):
+
+    await interaction.response.defer()
+
+    value = get_setting()
+
+    await interaction.followup.send(f"🎰 現在のスロット設定：{value}")
+
+
+# =========================
+# 設定変更（管理者のみ）
+# =========================
+@bot.tree.command(name="設定変更")
+async def setting_change(interaction: discord.Interaction, value: int):
+
+    await interaction.response.defer()
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.followup.send("❌ 管理者のみ")
+
+    if value < 1 or value > 6:
+        return await interaction.followup.send("1〜6のみ")
+
+    set_setting(value)
+
+    await interaction.followup.send(f"✅ 設定を{value}に変更しました")
+
+
+# =========================
+# テストスロット（最大1000回転）
+# =========================
+@bot.tree.command(name="テストスロット")
+async def test_slot(interaction: discord.Interaction, spins: int = 1000, bet: int = 100):
+
+    await interaction.response.defer()
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.followup.send("❌ 管理者のみ")
+
+    spins = min(spins, 1000)
+
+    setting = get_setting()
+
+    total_profit = 0
+    total_win = 0
+
+    for _ in range(spins):
+
+        grid = generate_grid(setting)
+        multiplier = calc_multiplier(grid)
+
+        win = int(bet * multiplier)
+        total_win += win
+        total_profit += (win - bet)
+
+    await interaction.followup.send(
+        f"🧪 テスト結果\n"
+        f"回転:{spins}\n"
+        f"BET:{bet}\n"
+        f"合計払戻:{total_win}\n"
+        f"合計損益:{total_profit}"
+    )
 
 
 # =========================
