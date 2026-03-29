@@ -105,7 +105,7 @@ def calc_multiplier(grid):
 # =========================
 def run_slot(user_id: str, bet: int):
 
-    setting = get_setting()
+    setting = get_setting("slot")
     balance = get_money(user_id)
 
     if balance < bet:
