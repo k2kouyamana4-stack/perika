@@ -100,7 +100,7 @@ def generate_grid(setting):
 
 
 # -----------------
-# 倍率計算（修正版）
+# 倍率
 # -----------------
 def calc_multiplier(grid):
     line = grid[1]
@@ -112,7 +112,7 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（修正版）
+# スロット本体（完全修正版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -131,24 +131,25 @@ def slot(user_id: str, bet: int):
     if balance < bet:
         return "残高不足"
 
+    # ★BETは必ず先に消費される前提で計算
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
+    profit = win - bet   # ←ここで必ずBETが差し引かれる
 
-    profit = win - bet
-
-    # 追加ペナルティ（任意要素）
+    # 任意ペナルティ（負け時のみ）
     if profit < 0 and random.random() < 0.05:
         profit -= int(bet * 0.3)
 
-    MAX_PROFIT = bet * 30
-    if profit > MAX_PROFIT:
-        profit = MAX_PROFIT
+    # ★残高がマイナスにならないよう制御
+    new_balance = balance + profit
+
+    if new_balance < 0:
+        profit = -balance
+        new_balance = 0
 
     add_money(user_id, profit)
-
-    new_balance = get_money(user_id)
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
@@ -189,7 +190,7 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# コマンド（全部defer済み）
+# コマンド（全defer対応）
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
