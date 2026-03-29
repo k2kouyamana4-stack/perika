@@ -40,16 +40,21 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# 🎰 確率テーブル
+# 🎰 設定別確率テーブル
 # -----------------
-SYMBOL_TABLE = [
-    ("🍒", 40),
-    ("🍋", 30),
-    ("🍉", 20),
-    ("⭐", 8),
-    ("💎", 2),
-    ("7️⃣", 0.5)
-]
+def get_symbol_table(setting):
+
+    tables = {
+        1: [("🍒", 50), ("🍋", 30), ("🍉", 15), ("⭐", 4), ("💎", 0.8), ("7️⃣", 0.2)],
+        2: [("🍒", 45), ("🍋", 30), ("🍉", 18), ("⭐", 5), ("💎", 1.5), ("7️⃣", 0.5)],
+        3: [("🍒", 40), ("🍋", 30), ("🍉", 20), ("⭐", 8), ("💎", 2), ("7️⃣", 0.5)],
+        4: [("🍒", 38), ("🍋", 28), ("🍉", 20), ("⭐", 10), ("💎", 3), ("7️⃣", 1)],
+        5: [("🍒", 35), ("🍋", 25), ("🍉", 20), ("⭐", 12), ("💎", 6), ("7️⃣", 2)],
+        6: [("🍒", 30), ("🍋", 25), ("🍉", 20), ("⭐", 15), ("💎", 7), ("7️⃣", 3)],
+    }
+
+    return tables.get(setting, tables[3])
+
 
 symbol_rate = {
     "🍒": 1.5,
@@ -64,22 +69,34 @@ symbol_rate = {
 # -----------------
 # 重み付き抽選
 # -----------------
-def weighted_choice():
+def weighted_choice(table):
     pool = []
-    for symbol, weight in SYMBOL_TABLE:
+    for symbol, weight in table:
         pool.extend([symbol] * int(weight * 10))
     return random.choice(pool)
 
 
 # -----------------
-# 3×3生成
+# 3×3生成（設定依存）
 # -----------------
-def generate_grid():
+def generate_grid(setting):
 
-    grid = [[weighted_choice() for _ in range(3)] for _ in range(3)]
+    table = get_symbol_table(setting)
 
-    if random.random() < 0.12:
-        symbol = weighted_choice()
+    grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
+
+    # ★ 設定ごとに揃いやすさ変化
+    bonus_rate = {
+        1: 0.05,
+        2: 0.08,
+        3: 0.12,
+        4: 0.15,
+        5: 0.18,
+        6: 0.22
+    }
+
+    if random.random() < bonus_rate.get(setting, 0.12):
+        symbol = weighted_choice(table)
         row = random.randint(0, 2)
         grid[row] = [symbol, symbol, symbol]
 
@@ -114,7 +131,7 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（表示改善版）
+# スロット本体（完成版）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -123,20 +140,20 @@ def slot(user_id: str, bet: int):
     try:
         setting = int(setting)
     except:
-        setting = 1
+        setting = 3
 
-    if setting not in [1, 2, 3, 4, 5, 6]:
-        setting = 1
+    if setting not in [1,2,3,4,5,6]:
+        setting = 3
 
     # ベット消費
     add_money(user_id, -bet)
 
-    grid = generate_grid()
+    grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
 
-    # ★ x1はハズレ扱い
+    # ハズレ処理
     if multiplier == 1:
         win = 0
 
@@ -150,7 +167,6 @@ def slot(user_id: str, bet: int):
 
     add_money(user_id, win)
 
-    # ★ 残高取得
     balance = get_money(user_id)
 
     text = "\n".join([" | ".join(row) for row in grid])
@@ -160,6 +176,7 @@ def slot(user_id: str, bet: int):
     return (
         f"{text}\n"
         f"🎰 BET: {bet}ペリカ\n"
+        f"⚙️ 設定: {setting}\n"
         f"🎰 x{multiplier}\n"
         f"💰 {sign}{profit}ペリカ\n"
         f"🏦 残高: {balance}ペリカ"
@@ -167,7 +184,7 @@ def slot(user_id: str, bet: int):
 
 
 # -----------------
-# ボタンUI
+# UI
 # -----------------
 class SlotView(discord.ui.View):
 
@@ -193,7 +210,7 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# /スロット
+# コマンド
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
@@ -208,39 +225,14 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     result = slot(user_id, bet)
 
-    await interaction.response.send_message(
-        result,
-        view=SlotView(user_id, bet)
-    )
+    await interaction.response.send_message(result, view=SlotView(user_id, bet))
 
 
-# -----------------
-# /連続スロット
-# -----------------
-@bot.tree.command(name="連続スロット")
-async def auto_slot(interaction: discord.Interaction, bet: int, times: int):
-
-    user_id = str(interaction.user.id)
-
-    if times < 1 or times > 10:
-        return await interaction.response.send_message("1~10", ephemeral=True)
-
-    if get_money(user_id) < bet * times:
-        return await interaction.response.send_message("残高不足", ephemeral=True)
-
-    logs = []
-
-    for _ in range(times):
-        logs.append(slot(user_id, bet))
-
-    await interaction.response.send_message("\n\n".join(logs))
-
-
-# -----------------
-# /設定変更
-# -----------------
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
 
     if value not in [1,2,3,4,5,6]:
         return await interaction.response.send_message("1~6で選択してください", ephemeral=True)
@@ -249,12 +241,8 @@ async def set_slot(interaction: discord.Interaction, value: int):
     await interaction.response.send_message(f"設定: {value}")
 
 
-# -----------------
-# /設定確認
-# -----------------
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
-
     await interaction.response.send_message(f"{get_setting()}")
 
 

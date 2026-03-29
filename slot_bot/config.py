@@ -1,6 +1,19 @@
 import os
 
+# -----------------
+# Discord
+# -----------------
 TOKEN = os.getenv("DISCORD_TOKEN")
-ADMINS = [947136029285048340,1423839192391356496]
-SUPABASE_URL = "https://qvqsuayqinimwwuqfipe.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2cXN1YXlxaW5pbXd3dXFmaXBlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDcwMjA2NCwiZXhwIjoyMDkwMjc4MDY0fQ.oh2AOx_bi1y04G-I98-SbK7OtvBP33aoV7afxmX0x4g"
+
+# 管理者ID（setで高速＆安全）
+ADMIN_IDS = {
+    947136029285048340,
+    1423839192391356496
+}
+
+
+# -----------------
+# Supabase
+# -----------------
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
