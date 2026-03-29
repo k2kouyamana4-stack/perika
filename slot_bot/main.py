@@ -3,6 +3,7 @@ import os
 import random
 from threading import Thread
 from flask import Flask
+import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -10,6 +11,13 @@ import discord
 from discord.ext import commands
 
 from shared.db import get_money, add_money, get_setting
+
+
+# -----------------
+# ログ設定（Render安定）
+# -----------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # -----------------
@@ -31,11 +39,12 @@ def run_web():
 # -----------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 # -----------------
-# スロット
+# スロット設定
 # -----------------
 def get_symbol_table(setting):
     return {
@@ -76,33 +85,30 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（ここが重要）
+# スロット本体（修正版）
 # -----------------
 def run_slot(user_id: str, bet: int):
 
     setting = int(get_setting())
     balance = get_money(user_id)
 
-    print("BEFORE:", balance)
+    logger.info(f"BEFORE: {balance}")
 
     if balance < bet:
         return "残高不足"
-
-    # ★先に減らす（重要）
-    add_money(user_id, -bet)
 
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
 
-    add_money(user_id, win)
+    # ★重要修正：1回で更新（バグ防止）
+    profit = win - bet
+    add_money(user_id, profit)
 
     new_balance = get_money(user_id)
 
-    print("AFTER:", new_balance)
-
-    profit = win - bet
+    logger.info(f"AFTER: {new_balance}")
 
     text = "\n".join([" | ".join(r) for r in grid])
     sign = "+" if profit >= 0 else ""
@@ -117,7 +123,7 @@ def run_slot(user_id: str, bet: int):
 
 
 # -----------------
-# Discord UI
+# UI
 # -----------------
 class SlotView(discord.ui.View):
 
@@ -126,7 +132,7 @@ class SlotView(discord.ui.View):
         self.user_id = user_id
         self.bet = bet
 
-    @discord.ui.button(label="もう一回")
+    @discord.ui.button(label="もう一回", style=discord.ButtonStyle.green)
     async def again(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         if str(interaction.user.id) != self.user_id:
