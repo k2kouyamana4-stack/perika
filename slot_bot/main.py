@@ -37,29 +37,29 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 # -----------------
-# 🎰 設定別確率（弱体化済み）
+# 🎰 設定別確率（完成版バランス）
 # -----------------
 def get_symbol_table(setting):
     tables = {
-        1: [("🍒", 60), ("🍋", 30), ("🍉", 7), ("⭐", 2), ("💎", 0.8), ("7️⃣", 0.05)],
-        2: [("🍒", 55), ("🍋", 30), ("🍉", 10), ("⭐", 3), ("💎", 1), ("7️⃣", 0.1)],
-        3: [("🍒", 50), ("🍋", 32), ("🍉", 15), ("⭐", 3.5), ("💎", 1.2), ("7️⃣", 0.2)],
-        4: [("🍒", 45), ("🍋", 30), ("🍉", 18), ("⭐", 5), ("💎", 2), ("7️⃣", 0.3)],
-        5: [("🍒", 40), ("🍋", 28), ("🍉", 20), ("⭐", 7), ("💎", 4), ("7️⃣", 0.8)],
-        6: [("🍒", 35), ("🍋", 25), ("🍉", 20), ("⭐", 10), ("💎", 7), ("7️⃣", 2)],
+        1: [("🍒", 60), ("🍋", 30), ("🍉", 7), ("⭐", 2), ("💎", 0.5), ("7️⃣", 0.05)],
+        2: [("🍒", 55), ("🍋", 30), ("🍉", 10), ("⭐", 3), ("💎", 0.8), ("7️⃣", 0.1)],
+        3: [("🍒", 52), ("🍋", 32), ("🍉", 13), ("⭐", 2.5), ("💎", 1), ("7️⃣", 0.15)],
+        4: [("🍒", 48), ("🍋", 30), ("🍉", 15), ("⭐", 4), ("💎", 1.5), ("7️⃣", 0.25)],
+        5: [("🍒", 43), ("🍋", 28), ("🍉", 18), ("⭐", 6), ("💎", 3), ("7️⃣", 0.6)],
+        6: [("🍒", 38), ("🍋", 25), ("🍉", 20), ("⭐", 9), ("💎", 5), ("7️⃣", 1.5)],
     }
     return tables.get(setting, tables[3])
 
 # -----------------
-# 🎰 倍率（弱体化）
+# 🎰 倍率（微勝ち調整）
 # -----------------
 symbol_rate = {
-    "🍒": 1.2,
-    "🍋": 1.6,
-    "🍉": 2.2,
-    "⭐": 4.5,
-    "💎": 8,
-    "7️⃣": 20
+    "🍒": 1.1,
+    "🍋": 1.4,
+    "🍉": 2.0,
+    "⭐": 3.5,
+    "💎": 6,
+    "7️⃣": 18
 }
 
 # -----------------
@@ -72,53 +72,40 @@ def weighted_choice(table):
     return random.choice(pool)
 
 # -----------------
-# 生成（ボーナス弱体化）
+# 生成（弱ボーナス）
 # -----------------
 def generate_grid(setting):
     table = get_symbol_table(setting)
     grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
     bonus_rate = {
-        1: 0.02,
-        2: 0.03,
-        3: 0.05,
-        4: 0.07,
-        5: 0.10,
-        6: 0.15
+        1: 0.01,
+        2: 0.015,
+        3: 0.02,
+        4: 0.03,
+        5: 0.05,
+        6: 0.08
     }
 
-    if random.random() < bonus_rate.get(setting, 0.05):
+    if random.random() < bonus_rate.get(setting, 0.02):
         symbol = weighted_choice(table)
-        row = random.randint(0, 2)
-        grid[row] = [symbol, symbol, symbol]
+        grid[1] = [symbol, symbol, symbol]
 
     return grid
 
 # -----------------
-# 倍率計算
+# 倍率計算（中央1ライン）
 # -----------------
 def calc_multiplier(grid):
-    lines = [
-        [grid[0][0], grid[0][1], grid[0][2]],
-        [grid[1][0], grid[1][1], grid[1][2]],
-        [grid[2][0], grid[2][1], grid[2][2]],
-        [grid[0][0], grid[1][0], grid[2][0]],
-        [grid[0][1], grid[1][1], grid[2][1]],
-        [grid[0][2], grid[1][2], grid[2][2]],
-        [grid[0][0], grid[1][1], grid[2][2]],
-        [grid[0][2], grid[1][1], grid[2][0]],
-    ]
+    line = [grid[1][0], grid[1][1], grid[1][2]]
 
-    score = 0
+    if line[0] == line[1] == line[2]:
+        return round(symbol_rate.get(line[0], 1), 2)
 
-    for line in lines:
-        if line[0] == line[1] == line[2]:
-            score += symbol_rate.get(line[0], 1)
-
-    return max(1, round(score, 2))
+    return 1
 
 # -----------------
-# スロット本体（負け寄り強化版）
+# スロット本体（楽しいバランス）
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -139,26 +126,20 @@ def slot(user_id: str, bet: int):
 
     win = int(bet * multiplier)
 
-    # ハズレ
     if multiplier == 1:
         win = 0
 
     profit = win - bet
 
-    # 💀 追い打ち強化
-    if profit < 0:
-        if random.random() < 0.10:
-            profit -= int(bet * 0.5)
-        elif random.random() < 0.05:
-            profit -= int(bet * 1.0)
+    # 軽い負け補正
+    if profit < 0 and random.random() < 0.05:
+        profit -= int(bet * 0.3)
 
-    # 上限
-    MAX_PROFIT = bet * 50
+    MAX_PROFIT = bet * 30
     if profit > MAX_PROFIT:
         profit = MAX_PROFIT
         win = bet + profit
 
-    # 反映
     add_money(user_id, win + (profit - (win - bet)))
 
     balance = get_money(user_id)
@@ -169,7 +150,6 @@ def slot(user_id: str, bet: int):
     return (
         f"{text}\n"
         f"🎰 BET: {bet}ペリカ\n"
-        f"⚙️ 設定: {setting}\n"
         f"🎰 x{multiplier}\n"
         f"💰 {sign}{profit}ペリカ\n"
         f"🏦 残高: {balance}ペリカ"
@@ -238,6 +218,9 @@ async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
 
+# -----------------
+# テストコマンド
+# -----------------
 @bot.tree.command(name="テストスロット")
 @app_commands.describe(bet="ベット額", times="回数（最大1000）")
 async def test_slot(interaction: discord.Interaction, bet: int, times: int):
@@ -256,12 +239,7 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
     total_profit = 0
     hit_count = 0
 
-    setting = get_setting()
-
-    try:
-        setting = int(setting)
-    except:
-        setting = 3
+    setting = int(get_setting())
 
     for _ in range(times):
         grid = generate_grid(setting)
@@ -276,11 +254,8 @@ async def test_slot(interaction: discord.Interaction, bet: int, times: int):
 
         profit = win - bet
 
-        if profit < 0:
-            if random.random() < 0.10:
-                profit -= int(bet * 0.5)
-            elif random.random() < 0.05:
-                profit -= int(bet * 1.0)
+        if profit < 0 and random.random() < 0.05:
+            profit -= int(bet * 0.3)
 
         total_profit += profit
 
@@ -307,8 +282,10 @@ async def on_ready():
     await bot.tree.sync()
     print("slot bot ready")
 
+
 def run_bot():
     bot.run(TOKEN)
+
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
