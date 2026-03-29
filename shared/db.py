@@ -1,73 +1,337 @@
-from supabase import create_client
+import sys
 import os
+import asyncio
+import random
+from threading import Thread
+from flask import Flask
 
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_KEY")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-supabase = create_client(url, key)
+import discord
+from discord import app_commands
+from discord.ext import commands
 
-
-# -----------------
-# 所持金取得
-# -----------------
-def get_money(user_id: str):
-    res = supabase.table("users").select("*").eq("user_id", user_id).execute()
-
-    if res.data:
-        return res.data[0]["money"]
-
-    supabase.table("users").insert({
-        "user_id": user_id,
-        "money": 30000
-    }).execute()
-
-    return 30000
+from shared.db import get_money, add_money, get_setting, set_setting
 
 
 # -----------------
-# 所持金変更
+# Flask
 # -----------------
-def add_money(user_id: str, amount: int):
-    current = get_money(user_id)
-    new_money = current + amount
+app = Flask(__name__)
 
-    supabase.table("users").update({
-        "money": new_money
-    }).eq("user_id", user_id).execute()
+@app.route("/")
+def home():
+    return "alive"
 
-
-# -----------------
-# ランキング
-# -----------------
-def get_ranking(limit=10):
-    res = supabase.table("users") \
-        .select("*") \
-        .order("money", desc=True) \
-        .limit(limit) \
-        .execute()
-
-    return res.data
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 
 # -----------------
-# 設定（スロット倍率）
+# Bot
 # -----------------
-def get_setting():
-    res = supabase.table("settings").select("*").eq("key", "slot").execute()
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-    if res.data:
-        return res.data[0]["value"]
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-    supabase.table("settings").insert({
-        "key": "slot",
-        "value": 1
-    }).execute()
-
-    return 1
+ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
-def set_setting(value: int):
-    supabase.table("settings").upsert({
-        "key": "slot",
-        "value": value
-    }).execute()
+# -----------------
+# 🎰 設定別確率
+# -----------------
+def get_symbol_table(setting):
+
+    tables = {
+        1: [("🍒", 55), ("🍋", 30), ("🍉", 10), ("⭐", 3), ("💎", 1.5), ("7️⃣", 0.1)],
+        2: [("🍒", 50), ("🍋", 30), ("🍉", 15), ("⭐", 3.5), ("💎", 1.3), ("7️⃣", 0.2)],
+        3: [("🍒", 45), ("🍋", 30), ("🍉", 18), ("⭐", 5), ("💎", 1.8), ("7️⃣", 0.3)],
+        4: [("🍒", 42), ("🍋", 28), ("🍉", 20), ("⭐", 6), ("💎", 2.5), ("7️⃣", 0.5)],
+        5: [("🍒", 38), ("🍋", 26), ("🍉", 20), ("⭐", 8), ("💎", 5), ("7️⃣", 1)],
+        6: [("🍒", 35), ("🍋", 25), ("🍉", 20), ("⭐", 10), ("💎", 7), ("7️⃣", 2)],
+    }
+
+    return tables.get(setting, tables[3])
+
+
+# -----------------
+# 🎰 倍率（負け寄り調整）
+# -----------------
+symbol_rate = {
+    "🍒": 1.3,
+    "🍋": 1.8,
+    "🍉": 2.5,
+    "⭐": 5,
+    "💎": 10,
+    "7️⃣": 25
+}
+
+
+# -----------------
+# 抽選
+# -----------------
+def weighted_choice(table):
+    pool = []
+    for symbol, weight in table:
+        pool.extend([symbol] * int(weight * 10))
+    return random.choice(pool)
+
+
+# -----------------
+# 生成（演出）
+# -----------------
+def generate_grid(setting):
+
+    table = get_symbol_table(setting)
+
+    grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
+
+    bonus_rate = {
+        1: 0.03,
+        2: 0.05,
+        3: 0.08,
+        4: 0.10,
+        5: 0.13,
+        6: 0.18
+    }
+
+    if random.random() < bonus_rate.get(setting, 0.08):
+        symbol = weighted_choice(table)
+        row = random.randint(0, 2)
+        grid[row] = [symbol, symbol, symbol]
+
+    return grid
+
+
+# -----------------
+# 倍率計算
+# -----------------
+def calc_multiplier(grid):
+
+    lines = [
+        [grid[0][0], grid[0][1], grid[0][2]],
+        [grid[1][0], grid[1][1], grid[1][2]],
+        [grid[2][0], grid[2][1], grid[2][2]],
+
+        [grid[0][0], grid[1][0], grid[2][0]],
+        [grid[0][1], grid[1][1], grid[2][1]],
+        [grid[0][2], grid[1][2], grid[2][2]],
+
+        [grid[0][0], grid[1][1], grid[2][2]],
+        [grid[0][2], grid[1][1], grid[2][0]],
+    ]
+
+    score = 0
+
+    for line in lines:
+        if line[0] == line[1] == line[2]:
+            score += symbol_rate.get(line[0], 1)
+
+    return max(1, round(score, 2))
+
+
+# -----------------
+# スロット本体
+# -----------------
+def slot(user_id: str, bet: int):
+
+    setting = get_setting()
+
+    try:
+        setting = int(setting)
+    except:
+        setting = 3
+
+    if setting not in [1,2,3,4,5,6]:
+        setting = 3
+
+    add_money(user_id, -bet)
+
+    grid = generate_grid(setting)
+    multiplier = calc_multiplier(grid)
+
+    win = int(bet * multiplier)
+
+    if multiplier == 1:
+        win = 0
+
+    profit = win - bet
+
+    # ★ 負け強化
+    if profit < 0 and random.random() < 0.05:
+        extra_loss = int(bet * 0.5)
+        profit -= extra_loss
+
+    # 上限
+    MAX_PROFIT = bet * 50
+    if profit > MAX_PROFIT:
+        profit = MAX_PROFIT
+        win = bet + profit
+
+    add_money(user_id, win + (profit - (win - bet)))
+
+    balance = get_money(user_id)
+
+    text = "\n".join([" | ".join(row) for row in grid])
+
+    sign = "+" if profit >= 0 else ""
+
+    return (
+        f"{text}\n"
+        f"🎰 BET: {bet}ペリカ\n"
+        f"⚙️ 設定: {setting}\n"
+        f"🎰 x{multiplier}\n"
+        f"💰 {sign}{profit}ペリカ\n"
+        f"🏦 残高: {balance}ペリカ"
+    )
+
+
+# -----------------
+# UI
+# -----------------
+class SlotView(discord.ui.View):
+
+    def __init__(self, user_id: str, bet: int):
+        super().__init__(timeout=60)
+        self.user_id = user_id
+        self.bet = bet
+
+    @discord.ui.button(label="もう一回", style=discord.ButtonStyle.green)
+    async def again(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if str(interaction.user.id) != self.user_id:
+            return await interaction.response.send_message("他人は操作できない", ephemeral=True)
+
+        result = slot(self.user_id, self.bet)
+        await interaction.response.edit_message(content=result, view=self)
+
+    @discord.ui.button(label="やめる", style=discord.ButtonStyle.red)
+    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        await interaction.response.edit_message(content="終了", view=None)
+        self.stop()
+
+
+# -----------------
+# コマンド
+# -----------------
+@bot.tree.command(name="スロット")
+async def slot_cmd(interaction: discord.Interaction, bet: int):
+
+    user_id = str(interaction.user.id)
+
+    if bet <= 0:
+        return await interaction.response.send_message("1以上", ephemeral=True)
+
+    if get_money(user_id) < bet:
+        return await interaction.response.send_message("残高不足", ephemeral=True)
+
+    result = slot(user_id, bet)
+
+    await interaction.response.send_message(result, view=SlotView(user_id, bet))
+
+
+@bot.tree.command(name="設定変更")
+async def set_slot(interaction: discord.Interaction, value: int):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
+
+    if value not in [1,2,3,4,5,6]:
+        return await interaction.response.send_message("1~6で選択してください", ephemeral=True)
+
+    set_setting(value)
+    await interaction.response.send_message(f"設定: {value}")
+
+
+@bot.tree.command(name="設定確認")
+async def show_setting(interaction: discord.Interaction):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
+
+    await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
+
+
+# -----------------
+# テストコマンド
+# -----------------
+@bot.tree.command(name="テストスロット")
+@app_commands.describe(bet="ベット額", times="回数（最大1000）")
+async def test_slot(interaction: discord.Interaction, bet: int, times: int):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
+
+    if bet <= 0:
+        return await interaction.response.send_message("betは1以上", ephemeral=True)
+
+    if times < 1 or times > 1000:
+        return await interaction.response.send_message("回数は1〜1000", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    total_profit = 0
+    hit_count = 0
+
+    setting = get_setting()
+
+    try:
+        setting = int(setting)
+    except:
+        setting = 3
+
+    for _ in range(times):
+        grid = generate_grid(setting)
+        multiplier = calc_multiplier(grid)
+
+        win = int(bet * multiplier)
+
+        if multiplier == 1:
+            win = 0
+        else:
+            hit_count += 1
+
+        profit = win - bet
+
+        # 本体と同じ処理
+        if profit < 0 and random.random() < 0.05:
+            extra_loss = int(bet * 0.5)
+            profit -= extra_loss
+
+        total_profit += profit
+
+    avg = total_profit / times
+
+    result = (
+        f"🎰 テスト結果\n"
+        f"回数: {times}\n"
+        f"BET: {bet}\n"
+        f"設定: {setting}\n\n"
+        f"総収支: {total_profit}ペリカ\n"
+        f"平均: {round(avg,2)}ペリカ/回\n"
+        f"当たり回数: {hit_count}回\n"
+        f"当たり率: {round(hit_count/times*100,1)}%"
+    )
+
+    await interaction.followup.send(result, ephemeral=True)
+
+
+# -----------------
+# 起動
+# -----------------
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print("slot bot ready")
+
+
+def run_bot():
+    bot.run(TOKEN)
+
+
+if __name__ == "__main__":
+    Thread(target=run_web).start()
+    run_bot()

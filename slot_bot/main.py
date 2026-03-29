@@ -57,7 +57,7 @@ def get_symbol_table(setting):
 
 
 # -----------------
-# 🎰 倍率（弱体化済み）
+# 🎰 倍率（負け寄り調整）
 # -----------------
 symbol_rate = {
     "🍒": 1.3,
@@ -80,7 +80,7 @@ def weighted_choice(table):
 
 
 # -----------------
-# 生成（演出弱体化）
+# 生成（演出）
 # -----------------
 def generate_grid(setting):
 
@@ -154,13 +154,12 @@ def slot(user_id: str, bet: int):
 
     win = int(bet * multiplier)
 
-    # ハズレ
     if multiplier == 1:
         win = 0
 
     profit = win - bet
 
-    # ★ 追い打ち（負け強化）
+    # ★ 負け強化
     if profit < 0 and random.random() < 0.05:
         extra_loss = int(bet * 0.5)
         profit -= extra_loss
@@ -171,7 +170,7 @@ def slot(user_id: str, bet: int):
         profit = MAX_PROFIT
         win = bet + profit
 
-    add_money(user_id, win + (profit - (win - bet)))  # 補正込み
+    add_money(user_id, win + (profit - (win - bet)))
 
     balance = get_money(user_id)
 
@@ -254,6 +253,70 @@ async def show_setting(interaction: discord.Interaction):
         return await interaction.response.send_message("権限がありません", ephemeral=True)
 
     await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
+
+
+# -----------------
+# テストコマンド
+# -----------------
+@bot.tree.command(name="テストスロット")
+@app_commands.describe(bet="ベット額", times="回数（最大1000）")
+async def test_slot(interaction: discord.Interaction, bet: int, times: int):
+
+    if interaction.user.id not in ADMIN_IDS:
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
+
+    if bet <= 0:
+        return await interaction.response.send_message("betは1以上", ephemeral=True)
+
+    if times < 1 or times > 1000:
+        return await interaction.response.send_message("回数は1〜1000", ephemeral=True)
+
+    await interaction.response.defer(ephemeral=True)
+
+    total_profit = 0
+    hit_count = 0
+
+    setting = get_setting()
+
+    try:
+        setting = int(setting)
+    except:
+        setting = 3
+
+    for _ in range(times):
+        grid = generate_grid(setting)
+        multiplier = calc_multiplier(grid)
+
+        win = int(bet * multiplier)
+
+        if multiplier == 1:
+            win = 0
+        else:
+            hit_count += 1
+
+        profit = win - bet
+
+        # 本体と同じ処理
+        if profit < 0 and random.random() < 0.05:
+            extra_loss = int(bet * 0.5)
+            profit -= extra_loss
+
+        total_profit += profit
+
+    avg = total_profit / times
+
+    result = (
+        f"🎰 テスト結果\n"
+        f"回数: {times}\n"
+        f"BET: {bet}\n"
+        f"設定: {setting}\n\n"
+        f"総収支: {total_profit}ペリカ\n"
+        f"平均: {round(avg,2)}ペリカ/回\n"
+        f"当たり回数: {hit_count}回\n"
+        f"当たり率: {round(hit_count/times*100,1)}%"
+    )
+
+    await interaction.followup.send(result, ephemeral=True)
 
 
 # -----------------
