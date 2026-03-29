@@ -40,34 +40,37 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# 🎰 設定別確率テーブル
+# 🎰 設定別確率
 # -----------------
 def get_symbol_table(setting):
 
     tables = {
-        1: [("🍒", 50), ("🍋", 30), ("🍉", 15), ("⭐", 4), ("💎", 0.8), ("7️⃣", 0.2)],
-        2: [("🍒", 45), ("🍋", 30), ("🍉", 18), ("⭐", 5), ("💎", 1.5), ("7️⃣", 0.5)],
-        3: [("🍒", 40), ("🍋", 30), ("🍉", 20), ("⭐", 8), ("💎", 2), ("7️⃣", 0.5)],
-        4: [("🍒", 38), ("🍋", 28), ("🍉", 20), ("⭐", 10), ("💎", 3), ("7️⃣", 1)],
-        5: [("🍒", 35), ("🍋", 25), ("🍉", 20), ("⭐", 12), ("💎", 6), ("7️⃣", 2)],
-        6: [("🍒", 30), ("🍋", 25), ("🍉", 20), ("⭐", 15), ("💎", 7), ("7️⃣", 3)],
+        1: [("🍒", 55), ("🍋", 30), ("🍉", 10), ("⭐", 3), ("💎", 1.5), ("7️⃣", 0.1)],
+        2: [("🍒", 50), ("🍋", 30), ("🍉", 15), ("⭐", 3.5), ("💎", 1.3), ("7️⃣", 0.2)],
+        3: [("🍒", 45), ("🍋", 30), ("🍉", 18), ("⭐", 5), ("💎", 1.8), ("7️⃣", 0.3)],
+        4: [("🍒", 42), ("🍋", 28), ("🍉", 20), ("⭐", 6), ("💎", 2.5), ("7️⃣", 0.5)],
+        5: [("🍒", 38), ("🍋", 26), ("🍉", 20), ("⭐", 8), ("💎", 5), ("7️⃣", 1)],
+        6: [("🍒", 35), ("🍋", 25), ("🍉", 20), ("⭐", 10), ("💎", 7), ("7️⃣", 2)],
     }
 
     return tables.get(setting, tables[3])
 
 
+# -----------------
+# 🎰 倍率（弱体化済み）
+# -----------------
 symbol_rate = {
-    "🍒": 1.5,
-    "🍋": 2,
-    "🍉": 3,
-    "⭐": 6,
-    "💎": 12,
-    "7️⃣": 30
+    "🍒": 1.3,
+    "🍋": 1.8,
+    "🍉": 2.5,
+    "⭐": 5,
+    "💎": 10,
+    "7️⃣": 25
 }
 
 
 # -----------------
-# 重み付き抽選
+# 抽選
 # -----------------
 def weighted_choice(table):
     pool = []
@@ -77,7 +80,7 @@ def weighted_choice(table):
 
 
 # -----------------
-# 3×3生成（設定依存）
+# 生成（演出弱体化）
 # -----------------
 def generate_grid(setting):
 
@@ -85,17 +88,16 @@ def generate_grid(setting):
 
     grid = [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
-    # ★ 設定ごとに揃いやすさ変化
     bonus_rate = {
-        1: 0.05,
-        2: 0.08,
-        3: 0.12,
-        4: 0.15,
-        5: 0.18,
-        6: 0.22
+        1: 0.03,
+        2: 0.05,
+        3: 0.08,
+        4: 0.10,
+        5: 0.13,
+        6: 0.18
     }
 
-    if random.random() < bonus_rate.get(setting, 0.12):
+    if random.random() < bonus_rate.get(setting, 0.08):
         symbol = weighted_choice(table)
         row = random.randint(0, 2)
         grid[row] = [symbol, symbol, symbol]
@@ -131,7 +133,7 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（完成版）
+# スロット本体
 # -----------------
 def slot(user_id: str, bet: int):
 
@@ -145,7 +147,6 @@ def slot(user_id: str, bet: int):
     if setting not in [1,2,3,4,5,6]:
         setting = 3
 
-    # ベット消費
     add_money(user_id, -bet)
 
     grid = generate_grid(setting)
@@ -153,11 +154,16 @@ def slot(user_id: str, bet: int):
 
     win = int(bet * multiplier)
 
-    # ハズレ処理
+    # ハズレ
     if multiplier == 1:
         win = 0
 
     profit = win - bet
+
+    # ★ 追い打ち（負け強化）
+    if profit < 0 and random.random() < 0.05:
+        extra_loss = int(bet * 0.5)
+        profit -= extra_loss
 
     # 上限
     MAX_PROFIT = bet * 50
@@ -165,7 +171,7 @@ def slot(user_id: str, bet: int):
         profit = MAX_PROFIT
         win = bet + profit
 
-    add_money(user_id, win)
+    add_money(user_id, win + (profit - (win - bet)))  # 補正込み
 
     balance = get_money(user_id)
 
@@ -245,11 +251,9 @@ async def set_slot(interaction: discord.Interaction, value: int):
 async def show_setting(interaction: discord.Interaction):
 
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message(
-            "何見ようとしてんねん殺すぞ",
-            ephemeral=True
-        )
-    await interaction.response.send_message(f"{get_setting()}")
+        return await interaction.response.send_message("権限がありません", ephemeral=True)
+
+    await interaction.response.send_message(f"{get_setting()}", ephemeral=True)
 
 
 # -----------------
