@@ -34,10 +34,9 @@ def get_money(user_id: str):
 
 
 def add_money(user_id: str, amount: int):
-    supabase.rpc("add_money", {
-        "uid": user_id,
-        "amt": amount
-    }).execute()
+    supabase.table("users").update({
+        "money": get_money(user_id) + amount
+    }).eq("user_id", user_id).execute()
 
 
 def get_setting():
@@ -86,7 +85,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # =========================
-# スロット確率（超レア仕様）
+# スロット
 # =========================
 def get_symbol_table(setting):
     return {
@@ -121,11 +120,29 @@ def generate_grid(setting):
     return [[weighted_choice(table) for _ in range(3)] for _ in range(3)]
 
 
+# =========================
+# 8ライン
+# =========================
+LINES = [
+    (0,0,0),
+    (1,1,1),
+    (2,2,2),
+    (0,1,2),
+    (2,1,0),
+    (0,1,0),
+    (2,1,2),
+    (0,2,1),
+]
+
+
 def calc_multiplier(grid):
-    line = grid[1]
-    if line[0] == line[1] == line[2]:
-        return symbol_rate.get(line[0], 1)
-    return 1
+    total = 0
+
+    for a,b,c in LINES:
+        if grid[a][0] == grid[b][1] == grid[c][2]:
+            total += symbol_rate.get(grid[a][0], 1)
+
+    return total
 
 
 # =========================
@@ -139,7 +156,6 @@ def run_slot(user_id: str, bet: int):
     if balance < bet:
         return None
 
-    # BET先に減らす
     add_money(user_id, -bet)
 
     grid = generate_grid(setting)
@@ -147,7 +163,6 @@ def run_slot(user_id: str, bet: int):
 
     win = int(bet * multiplier)
 
-    # WIN加算
     add_money(user_id, win)
 
     new_balance = get_money(user_id)
@@ -157,11 +172,17 @@ def run_slot(user_id: str, bet: int):
     text = "\n".join([" | ".join(r) for r in grid])
     sign = "+" if profit >= 0 else ""
 
-    return f"{text}\nBET:{bet}\nx{round(multiplier,2)}\n{sign}{profit}\n残高:{new_balance}"
+    return (
+        f"{text}\n"
+        f"BET:{bet}\n"
+        f"x{round(multiplier,2)}\n"
+        f"{sign}{profit}\n"
+        f"残高:{new_balance}"
+    )
 
 
 # =========================
-# UI
+# UI（完全復活）
 # =========================
 class SlotView(discord.ui.View):
 
@@ -171,17 +192,23 @@ class SlotView(discord.ui.View):
         self.bet = bet
 
     @discord.ui.button(label="もう一回", style=discord.ButtonStyle.green)
-    async def again(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def again(self, interaction, button):
 
         if str(interaction.user.id) != self.user_id:
-            return await interaction.response.send_message("他人は操作不可", ephemeral=True)
+            return await interaction.response.send_message("他人不可", ephemeral=True)
 
         result = run_slot(self.user_id, self.bet)
         await interaction.response.edit_message(content=result, view=self)
 
+    @discord.ui.button(label="やめる", style=discord.ButtonStyle.red)
+    async def stop(self, interaction, button):
+
+        await interaction.response.edit_message(content="終了", view=None)
+        self.stop()
+
 
 # =========================
-# スロットコマンド
+# コマンド
 # =========================
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
@@ -202,58 +229,6 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
         return await interaction.followup.send("❌ 残高不足")
 
     await interaction.followup.send(result, view=SlotView(user_id, bet))
-
-
-# =========================
-# 設定変更
-# =========================
-@bot.tree.command(name="設定変更")
-async def set_cmd(interaction: discord.Interaction, value: int):
-
-    if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message("権限なし", ephemeral=True)
-
-    set_setting(value)
-    await interaction.response.send_message(f"設定:{value}", ephemeral=True)
-
-
-# =========================
-# 設定確認
-# =========================
-@bot.tree.command(name="設定確認")
-async def show_cmd(interaction: discord.Interaction):
-
-    await interaction.response.send_message(str(get_setting()), ephemeral=True)
-
-
-# =========================
-# テストスロット
-# =========================
-@bot.tree.command(name="テストスロット")
-async def test_cmd(interaction: discord.Interaction, bet: int, times: int):
-
-    if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message("権限なし", ephemeral=True)
-
-    await interaction.response.defer(ephemeral=True)
-
-    setting = get_setting()
-
-    total = 0
-    hits = 0
-
-    for _ in range(times):
-        grid = generate_grid(setting)
-        m = calc_multiplier(grid)
-        profit = int(bet * m) - bet
-
-        total += profit
-        if m > 1:
-            hits += 1
-
-    await interaction.followup.send(
-        f"回数:{times}\nBET:{bet}\n設定:{setting}\n収支:{total}\n当たり:{hits}"
-    )
 
 
 # =========================
