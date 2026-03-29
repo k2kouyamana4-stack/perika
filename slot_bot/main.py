@@ -178,6 +178,9 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     await interaction.followup.send(result, view=SlotView(user_id, bet))
 
+print("BEFORE:", get_money(user_id))
+add_money(user_id, -1000)
+print("AFTER:", get_money(user_id))
 
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
