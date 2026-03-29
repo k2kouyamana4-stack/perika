@@ -1,99 +1,61 @@
 from supabase import create_client
 import os
 
-# -----------------
-# Supabase接続
-# -----------------
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_KEY")
 
 supabase = create_client(url, key)
 
 
-# =========================
+# -----------------
 # ユーザー残高取得
-# =========================
+# -----------------
 def get_money(user_id: str):
-    res = supabase.table("users") \
-        .select("money") \
-        .eq("user_id", user_id) \
-        .execute()
+    res = supabase.table("users").select("money").eq("user_id", user_id).execute()
 
-    if res.data:
-        return res.data[0]["money"]
-
-    # 初回作成
-    supabase.table("users").insert({
-        "user_id": user_id,
-        "money": 30000
-    }).execute()
-
-    return 30000
-
-
-# =========================
-# 残高増減（安全版）
-# =========================
-def add_money(user_id: str, amount: int):
-
-    # RPCで安全更新（推奨）
-    try:
-        supabase.rpc("add_money", {
-            "uid": user_id,
-            "amt": amount
+    if len(res.data) == 0:
+        supabase.table("users").insert({
+            "user_id": user_id,
+            "money": 30000
         }).execute()
-    except Exception:
-        # フォールバック（RPCない場合）
-        res = supabase.table("users") \
-            .select("money") \
-            .eq("user_id", user_id) \
-            .single() \
-            .execute()
+        return 30000
 
-        current = res.data["money"]
-
-        supabase.table("users") \
-            .update({"money": current + amount}) \
-            .eq("user_id", user_id) \
-            .execute()
+    return res.data[0]["money"]
 
 
-# =========================
-# ランキング
-# =========================
-def get_ranking(limit: int = 10):
-    res = supabase.table("users") \
-        .select("user_id, money") \
-        .order("money", desc=True) \
-        .limit(limit) \
-        .execute()
+# -----------------
+# 加算（最重要）
+# -----------------
+def add_money(user_id: str, amount: int):
+    current = get_money(user_id)
+    new_value = current + amount
 
-    return res.data
+    supabase.table("users").update({
+        "money": new_value
+    }).eq("user_id", user_id).execute()
+
+    return new_value
 
 
-# =========================
-# スロット設定取得
-# =========================
+# -----------------
+# 設定取得
+# -----------------
 def get_setting():
-    res = supabase.table("settings") \
-        .select("value") \
-        .eq("key", "slot") \
-        .execute()
+    res = supabase.table("settings").select("value").eq("key", "slot").execute()
 
-    if res.data:
-        return res.data[0]["value"]
+    if len(res.data) == 0:
+        supabase.table("settings").insert({
+            "key": "slot",
+            "value": 3
+        }).execute()
+        return 3
 
-    supabase.table("settings").insert({
-        "key": "slot",
-        "value": 3
-    }).execute()
-
-    return 3
+    return res.data[0]["value"]
 
 
-# =========================
-# スロット設定変更
-# =========================
+# -----------------
+# 設定変更
+# -----------------
 def set_setting(value: int):
     supabase.table("settings").upsert({
         "key": "slot",

@@ -14,7 +14,7 @@ from shared.db import get_money, add_money, get_setting, set_setting
 
 
 # -----------------
-# Flask
+# Flask（Render対策）
 # -----------------
 app = Flask(__name__)
 
@@ -39,7 +39,7 @@ ADMIN_IDS = {947136029285048340, 1423839192391356496}
 
 
 # -----------------
-# スロット確率テーブル
+# スロット設定
 # -----------------
 def get_symbol_table(setting):
     tables = {
@@ -53,9 +53,6 @@ def get_symbol_table(setting):
     return tables.get(setting, tables[3])
 
 
-# -----------------
-# 倍率
-# -----------------
 symbol_rate = {
     "🍒": 1.05,
     "🍋": 1.3,
@@ -87,8 +84,8 @@ def generate_grid(setting):
     }
 
     if random.random() < bonus_rate.get(setting, 0.02):
-        symbol = weighted_choice(table)
-        grid[1] = [symbol, symbol, symbol]
+        s = weighted_choice(table)
+        grid[1] = [s, s, s]
 
     return grid
 
@@ -101,47 +98,36 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（修正版）
+# スロット本体（安定版）
 # -----------------
 def slot(user_id: str, bet: int):
 
-    setting = get_setting()
-
-    try:
-        setting = int(setting)
-    except:
-        setting = 3
-
-    if setting not in [1,2,3,4,5,6]:
-        setting = 3
-
+    setting = int(get_setting())
     balance = get_money(user_id)
 
     if balance < bet:
         return "残高不足"
 
-    # ★ここ重要：先にベットを引く
-    add_money(user_id, -bet)
-
     grid = generate_grid(setting)
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
-    add_money(user_id, win)
+    profit = win - bet
+
+    # ★1回で更新（重要）
+    add_money(user_id, profit)
 
     new_balance = get_money(user_id)
-
-    profit = win - bet
 
     text = "\n".join([" | ".join(row) for row in grid])
     sign = "+" if profit >= 0 else ""
 
     return (
         f"{text}\n"
-        f"🎰 BET: {bet}ペリカ\n"
+        f"🎰 BET: {bet}\n"
         f"🎰 x{round(multiplier,2)}\n"
-        f"💰 {sign}{profit}ペリカ\n"
-        f"🏦 残高: {new_balance}ペリカ"
+        f"💰 {sign}{profit}\n"
+        f"🏦 残高: {new_balance}"
     )
 
 
@@ -172,13 +158,12 @@ class SlotView(discord.ui.View):
 
 
 # -----------------
-# スラッシュコマンド
+# コマンド
 # -----------------
 @bot.tree.command(name="スロット")
 async def slot_cmd(interaction: discord.Interaction, bet: int):
 
     user_id = str(interaction.user.id)
-
     await interaction.response.defer()
 
     balance = get_money(user_id)
@@ -190,82 +175,30 @@ async def slot_cmd(interaction: discord.Interaction, bet: int):
         return await interaction.followup.send("残高不足")
 
     result = slot(user_id, bet)
-
     await interaction.followup.send(result, view=SlotView(user_id, bet))
 
 
-# -----------------
-# 設定変更
-# -----------------
 @bot.tree.command(name="設定変更")
 async def set_slot(interaction: discord.Interaction, value: int):
 
     await interaction.response.defer(ephemeral=True)
 
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.followup.send("権限がありません")
-
-    if value not in [1,2,3,4,5,6]:
-        return await interaction.followup.send("1~6で選択してください")
+        return await interaction.followup.send("権限なし")
 
     set_setting(value)
     await interaction.followup.send(f"設定: {value}")
 
 
-# -----------------
-# 設定確認
-# -----------------
 @bot.tree.command(name="設定確認")
 async def show_setting(interaction: discord.Interaction):
 
     await interaction.response.defer(ephemeral=True)
 
     if interaction.user.id not in ADMIN_IDS:
-        return await interaction.followup.send("権限がありません")
+        return await interaction.followup.send("権限なし")
 
-    await interaction.followup.send(f"{get_setting()}")
-
-
-# -----------------
-# テストスロット
-# -----------------
-@bot.tree.command(name="テストスロット")
-async def test_slot(interaction: discord.Interaction, bet: int, times: int):
-
-    if interaction.user.id not in ADMIN_IDS:
-        return await interaction.response.send_message("権限がありません", ephemeral=True)
-
-    await interaction.response.defer(ephemeral=True)
-
-    total_profit = 0
-    hit_count = 0
-
-    setting = int(get_setting())
-
-    for _ in range(times):
-        grid = generate_grid(setting)
-        multiplier = calc_multiplier(grid)
-
-        win = int(bet * multiplier)
-        profit = win - bet
-
-        if multiplier > 1:
-            hit_count += 1
-
-        total_profit += profit
-
-    avg = total_profit / times
-
-    await interaction.followup.send(
-        f"🎰 テスト結果\n"
-        f"回数: {times}\n"
-        f"BET: {bet}\n"
-        f"設定: {setting}\n\n"
-        f"総収支: {total_profit}ペリカ\n"
-        f"平均: {round(avg,2)}ペリカ/回\n"
-        f"当たり回数: {hit_count}回\n"
-        f"当たり率: {round(hit_count/times*100,1)}%"
-    )
+    await interaction.followup.send(str(get_setting()))
 
 
 # -----------------
