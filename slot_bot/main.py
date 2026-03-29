@@ -3,21 +3,22 @@ import os
 import random
 from threading import Thread
 from flask import Flask
-import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import discord
 from discord.ext import commands
 
-from shared.db import get_money, add_money, get_setting
+from supabase import create_client
 
 
 # -----------------
-# ログ設定（Render安定）
+# Supabase
 # -----------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+supabase = create_client(
+    os.getenv("SUPABASE_URL"),
+    os.getenv("SUPABASE_KEY")
+)
 
 
 # -----------------
@@ -44,7 +45,44 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 # -----------------
-# スロット設定
+# DB関数（修正済み）
+# -----------------
+def get_money(user_id: str):
+    res = supabase.table("users").select("money").eq("user_id", user_id).execute()
+
+    if not res.data:
+        supabase.table("users").insert({
+            "user_id": user_id,
+            "money": 30000
+        }).execute()
+        return 30000
+
+    return res.data[0]["money"]
+
+
+# ★ここが最重要修正（RPC化）
+def add_money(user_id: str, amount: int):
+    supabase.rpc("add_money", {
+        "uid": user_id,
+        "amt": amount
+    }).execute()
+
+
+def get_setting():
+    res = supabase.table("settings").select("value").eq("key", "slot").execute()
+
+    if not res.data:
+        supabase.table("settings").insert({
+            "key": "slot",
+            "value": 3
+        }).execute()
+        return 3
+
+    return res.data[0]["value"]
+
+
+# -----------------
+# スロット
 # -----------------
 def get_symbol_table(setting):
     return {
@@ -85,14 +123,12 @@ def calc_multiplier(grid):
 
 
 # -----------------
-# スロット本体（修正版）
+# スロット本体
 # -----------------
 def run_slot(user_id: str, bet: int):
 
     setting = int(get_setting())
     balance = get_money(user_id)
-
-    logger.info(f"BEFORE: {balance}")
 
     if balance < bet:
         return "残高不足"
@@ -101,14 +137,12 @@ def run_slot(user_id: str, bet: int):
     multiplier = calc_multiplier(grid)
 
     win = int(bet * multiplier)
-
-    # ★重要修正：1回で更新（バグ防止）
     profit = win - bet
+
+    # ★ここが安全ポイント（RPCで確実更新）
     add_money(user_id, profit)
 
     new_balance = get_money(user_id)
-
-    logger.info(f"AFTER: {new_balance}")
 
     text = "\n".join([" | ".join(r) for r in grid])
     sign = "+" if profit >= 0 else ""
@@ -123,7 +157,7 @@ def run_slot(user_id: str, bet: int):
 
 
 # -----------------
-# UI
+# Discord UI
 # -----------------
 class SlotView(discord.ui.View):
 
